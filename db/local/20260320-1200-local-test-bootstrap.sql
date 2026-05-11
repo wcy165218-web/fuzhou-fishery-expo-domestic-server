@@ -1,0 +1,621 @@
+-- Purpose: Reset and initialize the local D1 database for manual testing
+-- Scope: Local development only
+-- Rollback: Re-run this file to reset local test data
+
+PRAGMA foreign_keys = OFF;
+
+DROP TABLE IF EXISTS Agents;
+DROP TABLE IF EXISTS Expenses;
+DROP TABLE IF EXISTS WriteRateLimits;
+DROP TABLE IF EXISTS LoginAttempts;
+DROP TABLE IF EXISTS OrderOverpaymentIssues;
+DROP TABLE IF EXISTS OrderBoothChanges;
+DROP TABLE IF EXISTS BoothLocks;
+DROP TABLE IF EXISTS BoothMapItems;
+DROP TABLE IF EXISTS BoothMaps;
+DROP TABLE IF EXISTS ProjectErpConfigs;
+DROP TABLE IF EXISTS ProjectOrderReleaseSettings;
+DROP TABLE IF EXISTS ProjectOrderFieldSettings;
+DROP TABLE IF EXISTS Payments;
+DROP TABLE IF EXISTS Orders;
+DROP TABLE IF EXISTS Booths;
+DROP TABLE IF EXISTS Prices;
+DROP TABLE IF EXISTS Industries;
+DROP TABLE IF EXISTS Accounts;
+DROP TABLE IF EXISTS Staff;
+DROP TABLE IF EXISTS ExhibitorConfirmationEvents;
+DROP TABLE IF EXISTS ExhibitorConfirmationLinks;
+DROP TABLE IF EXISTS ExhibitionConfirmationSettings;
+DROP TABLE IF EXISTS ExhibitionSpecialDecorationReports;
+DROP TABLE IF EXISTS ExhibitionLintels;
+DROP TABLE IF EXISTS ExhibitionRefrigeratorRentalItems;
+DROP TABLE IF EXISTS ExhibitionRefrigeratorRentals;
+DROP TABLE IF EXISTS ExhibitionRefrigeratorConfigs;
+DROP TABLE IF EXISTS Projects;
+
+CREATE TABLE Projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  year INTEGER,
+  start_date TEXT,
+  end_date TEXT
+);
+
+CREATE TABLE Staff (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  target REAL NOT NULL DEFAULT 0,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  exclude_from_sales_ranking INTEGER NOT NULL DEFAULT 0,
+  token_index INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX idx_staff_single_super_admin
+  ON Staff ((1))
+  WHERE LOWER(TRIM(role)) IN ('super_admin', 'superadmin');
+
+CREATE TABLE Accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  account_name TEXT NOT NULL,
+  bank_name TEXT,
+  account_no TEXT
+);
+
+CREATE TABLE Industries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  industry_name TEXT NOT NULL,
+  UNIQUE(project_id, industry_name)
+);
+
+CREATE TABLE Prices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  booth_type TEXT NOT NULL,
+  price REAL NOT NULL DEFAULT 0,
+  UNIQUE(project_id, booth_type)
+);
+
+CREATE TABLE Booths (
+  row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL,
+  project_id INTEGER NOT NULL,
+  hall TEXT NOT NULL,
+  type TEXT NOT NULL,
+  area REAL NOT NULL DEFAULT 0,
+  price_unit TEXT,
+  base_price REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT '可售',
+  width_m REAL NOT NULL DEFAULT 0,
+  height_m REAL NOT NULL DEFAULT 0,
+  opening_type TEXT,
+  booth_map_id INTEGER,
+  source TEXT NOT NULL DEFAULT 'manual',
+  UNIQUE(id, project_id)
+);
+
+CREATE TABLE BoothLocks (
+  row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  booth_id TEXT NOT NULL,
+  lock_token TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, booth_id)
+);
+
+CREATE TABLE Orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  company_name TEXT NOT NULL,
+  credit_code TEXT,
+  no_code_checked INTEGER NOT NULL DEFAULT 0,
+  category TEXT,
+  main_business TEXT,
+  is_agent INTEGER NOT NULL DEFAULT 0,
+  agent_name TEXT,
+  contact_person TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  region TEXT,
+  booth_id TEXT NOT NULL,
+  area REAL NOT NULL DEFAULT 0,
+  price_unit TEXT,
+  unit_price REAL NOT NULL DEFAULT 0,
+  total_booth_fee REAL NOT NULL DEFAULT 0,
+  discount_reason TEXT,
+  other_income REAL NOT NULL DEFAULT 0,
+  fees_json TEXT NOT NULL DEFAULT '[]',
+  profile TEXT,
+  total_amount REAL NOT NULL DEFAULT 0,
+  paid_amount REAL NOT NULL DEFAULT 0,
+  contract_url TEXT,
+  booth_display_name TEXT,
+  sales_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT '正常',
+  reserved_release_due_at TEXT,
+  pending_at TEXT,
+  pending_source TEXT,
+  pending_reason TEXT,
+  pending_release_snapshot_json TEXT,
+  pending_payment_resolution_status TEXT NOT NULL DEFAULT '',
+  pending_payment_handling_method TEXT,
+  pending_payment_handling_note TEXT,
+  pending_payment_handled_by TEXT,
+  pending_payment_handled_at TEXT,
+  deleted_at TEXT,
+  deleted_by TEXT,
+  exhibitor_info_status TEXT NOT NULL DEFAULT 'sales_default',
+  exhibitor_info_confirmed_by TEXT NOT NULL DEFAULT '',
+  exhibitor_info_confirmed_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE Payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  payment_time TEXT NOT NULL,
+  payer_name TEXT,
+  bank_name TEXT,
+  remarks TEXT,
+  source TEXT NOT NULL DEFAULT 'MANUAL',
+  erp_record_id TEXT,
+  raw_payload TEXT,
+  deleted_at TEXT,
+  deleted_by TEXT
+);
+
+CREATE UNIQUE INDEX idx_payments_erp_record_id ON Payments (erp_record_id);
+
+CREATE TABLE LoginAttempts (
+  attempt_key TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  ip_address TEXT NOT NULL,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  last_failed_at TEXT,
+  locked_until TEXT
+);
+
+CREATE TABLE WriteRateLimits (
+  rate_key TEXT PRIMARY KEY,
+  request_count INTEGER NOT NULL DEFAULT 0,
+  window_start TEXT NOT NULL
+);
+
+CREATE TABLE ProjectErpConfigs (
+  project_id INTEGER PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  endpoint_url TEXT,
+  water_id TEXT,
+  session_cookie TEXT,
+  expected_project_name TEXT,
+  use_mock INTEGER NOT NULL DEFAULT 0,
+  mock_payload TEXT,
+  last_sync_at TEXT,
+  last_sync_summary TEXT
+);
+
+CREATE TABLE ProjectOrderFieldSettings (
+  project_id INTEGER NOT NULL,
+  field_key TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  required INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  PRIMARY KEY (project_id, field_key)
+);
+
+CREATE TABLE ProjectOrderReleaseSettings (
+  project_id INTEGER PRIMARY KEY,
+  release_after_minutes INTEGER,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE Expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  expense_type TEXT NOT NULL DEFAULT '其他代付',
+  payee_name TEXT NOT NULL,
+  payee_channel TEXT,
+  payee_bank TEXT,
+  payee_account TEXT,
+  amount REAL NOT NULL DEFAULT 0,
+  applicant TEXT,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  deleted_at TEXT,
+  deleted_by TEXT
+);
+
+CREATE TABLE Agents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  sales_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  deleted_at TEXT,
+  deleted_by TEXT,
+  UNIQUE(project_id, name)
+);
+
+CREATE TABLE OrderOverpaymentIssues (
+  order_id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL,
+  overpaid_amount REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  reason TEXT,
+  note TEXT,
+  handled_by TEXT,
+  handled_at TEXT,
+  detected_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE OrderBoothChanges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  old_booth_id TEXT NOT NULL,
+  new_booth_id TEXT NOT NULL,
+  old_area REAL NOT NULL DEFAULT 0,
+  new_area REAL NOT NULL DEFAULT 0,
+  booth_delta_count REAL NOT NULL DEFAULT 0,
+  old_total_amount REAL NOT NULL DEFAULT 0,
+  new_total_amount REAL NOT NULL DEFAULT 0,
+  total_amount_delta REAL NOT NULL DEFAULT 0,
+  changed_by TEXT,
+  reason TEXT,
+  changed_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE BoothMaps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  background_image_key TEXT,
+  scale_pixels_per_meter REAL NOT NULL DEFAULT 0,
+  default_stroke_width REAL NOT NULL DEFAULT 2,
+  canvas_width REAL NOT NULL DEFAULT 1600,
+  canvas_height REAL NOT NULL DEFAULT 900,
+  viewport_x REAL NOT NULL DEFAULT 0,
+  viewport_y REAL NOT NULL DEFAULT 0,
+  viewport_zoom REAL NOT NULL DEFAULT 1,
+  calibration_json TEXT NOT NULL DEFAULT '{}',
+  display_config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE BoothMapItems (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  map_id INTEGER NOT NULL,
+  booth_code TEXT NOT NULL,
+  hall TEXT NOT NULL,
+  booth_type TEXT NOT NULL,
+  opening_type TEXT,
+  width_m REAL NOT NULL DEFAULT 0,
+  height_m REAL NOT NULL DEFAULT 0,
+  area REAL NOT NULL DEFAULT 0,
+  x REAL NOT NULL DEFAULT 0,
+  y REAL NOT NULL DEFAULT 0,
+  rotation REAL NOT NULL DEFAULT 0,
+  stroke_width REAL NOT NULL DEFAULT 2,
+  shape_type TEXT NOT NULL DEFAULT 'rect',
+  points_json TEXT NOT NULL DEFAULT '[]',
+  label_style_json TEXT NOT NULL DEFAULT '{}',
+  z_index INTEGER NOT NULL DEFAULT 0,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  UNIQUE(project_id, booth_code)
+);
+
+CREATE INDEX idx_orders_project_status_created_at
+  ON Orders (project_id, status, created_at DESC);
+
+CREATE INDEX idx_orders_project_booth_status_created_at
+  ON Orders (project_id, booth_id, status, created_at ASC);
+
+CREATE INDEX idx_orders_project_sales_created_at
+  ON Orders (project_id, sales_name, created_at DESC);
+
+CREATE INDEX idx_orders_project_status_release_due
+  ON Orders (project_id, status, reserved_release_due_at);
+
+CREATE INDEX idx_orders_project_pending_at
+  ON Orders (project_id, status, pending_at DESC);
+
+CREATE INDEX idx_payments_order_deleted_time
+  ON Payments (order_id, deleted_at, payment_time DESC);
+
+CREATE INDEX idx_payments_project_deleted_order
+  ON Payments (project_id, deleted_at, order_id);
+
+CREATE INDEX idx_expenses_order_deleted_created_at
+  ON Expenses (order_id, deleted_at, created_at DESC);
+
+CREATE INDEX idx_expenses_project_deleted_order
+  ON Expenses (project_id, deleted_at, order_id);
+
+CREATE INDEX idx_booths_project_hall_id
+  ON Booths (project_id, hall, id);
+
+CREATE INDEX idx_booth_locks_project_expires_at
+  ON BoothLocks (project_id, expires_at);
+
+CREATE INDEX idx_booths_project_booth_map_id
+  ON Booths (project_id, booth_map_id, id);
+
+CREATE INDEX idx_booth_maps_project_updated_at
+  ON BoothMaps (project_id, updated_at DESC);
+
+CREATE INDEX idx_booth_map_items_project_map_z_index
+  ON BoothMapItems (project_id, map_id, z_index, id);
+
+CREATE INDEX idx_booth_map_items_project_map_booth_code
+  ON BoothMapItems (project_id, map_id, booth_code);
+
+CREATE TABLE ExhibitionRefrigeratorConfigs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  style_name TEXT NOT NULL,
+  spec TEXT NOT NULL,
+  image_key TEXT,
+  unit_price REAL NOT NULL DEFAULT 0,
+  stock_quantity INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  UNIQUE(project_id, style_name)
+);
+
+CREATE TABLE ExhibitionRefrigeratorRentals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  company_name TEXT NOT NULL,
+  sales_name TEXT NOT NULL,
+  hall_names TEXT NOT NULL DEFAULT '',
+  booth_numbers TEXT NOT NULL DEFAULT '',
+  organizer_payment_total REAL NOT NULL DEFAULT 0,
+  venue_payment_total REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  UNIQUE(project_id, company_name)
+);
+
+CREATE TABLE ExhibitionRefrigeratorRentalItems (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  rental_id INTEGER NOT NULL,
+  config_id INTEGER NOT NULL,
+  style_name_snapshot TEXT NOT NULL,
+  spec_snapshot TEXT NOT NULL,
+  image_key_snapshot TEXT,
+  unit_price_snapshot REAL NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT NOT NULL,
+  line_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE ExhibitionLintels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  booth_code TEXT NOT NULL,
+  name_zh TEXT NOT NULL DEFAULT '',
+  name_en TEXT NOT NULL DEFAULT '',
+  remark TEXT NOT NULL DEFAULT '',
+  business_confirmed INTEGER NOT NULL DEFAULT 0,
+  business_confirmed_by TEXT NOT NULL DEFAULT '',
+  business_confirmed_at TEXT NOT NULL DEFAULT '',
+  business_confirm_source TEXT NOT NULL DEFAULT 'sales',
+  exhibition_confirmed INTEGER NOT NULL DEFAULT 0,
+  exhibition_confirmed_by TEXT NOT NULL DEFAULT '',
+  exhibition_confirmed_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  UNIQUE(project_id, order_id, booth_code)
+);
+
+CREATE TABLE ExhibitionSpecialDecorationReports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  reported INTEGER NOT NULL DEFAULT 0,
+  reported_by TEXT NOT NULL DEFAULT '',
+  reported_at TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  UNIQUE(project_id, order_id)
+);
+
+CREATE INDEX idx_exhibition_refrigerator_configs_project_active
+  ON ExhibitionRefrigeratorConfigs (project_id, is_active, display_order, id);
+
+CREATE INDEX idx_exhibition_refrigerator_rentals_project_sales_updated
+  ON ExhibitionRefrigeratorRentals (project_id, sales_name, updated_at DESC, id DESC);
+
+CREATE INDEX idx_exhibition_refrigerator_items_rental
+  ON ExhibitionRefrigeratorRentalItems (rental_id, config_id);
+
+CREATE INDEX idx_exhibition_lintels_project_order
+  ON ExhibitionLintels (project_id, order_id, booth_code);
+
+CREATE INDEX idx_exhibition_lintels_project_status
+  ON ExhibitionLintels (project_id, business_confirmed, exhibition_confirmed, updated_at DESC, id DESC);
+
+CREATE INDEX idx_special_decoration_reports_project_reported
+  ON ExhibitionSpecialDecorationReports(project_id, reported, updated_at DESC);
+
+CREATE INDEX idx_special_decoration_reports_order
+  ON ExhibitionSpecialDecorationReports(order_id);
+
+CREATE TABLE ExhibitionConfirmationSettings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL UNIQUE,
+  title_text TEXT NOT NULL DEFAULT '请核对并确认参展信息',
+  banner_image_key TEXT NOT NULL DEFAULT '',
+  link_ttl_minutes INTEGER NOT NULL DEFAULT 30,
+  collection_deadline_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE ExhibitorConfirmationLinks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  token_secret TEXT NOT NULL DEFAULT '',
+  expires_at TEXT NOT NULL,
+  submitted_at TEXT NOT NULL DEFAULT '',
+  revoked_at TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE TABLE ExhibitorConfirmationEvents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  order_id INTEGER NOT NULL,
+  link_id INTEGER NOT NULL DEFAULT 0,
+  event_type TEXT NOT NULL,
+  before_snapshot_json TEXT NOT NULL DEFAULT '{}',
+  after_snapshot_json TEXT NOT NULL DEFAULT '{}',
+  diff_json TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE INDEX idx_exhibitor_confirmation_links_order
+  ON ExhibitorConfirmationLinks (project_id, order_id, revoked_at, submitted_at, expires_at);
+
+CREATE INDEX idx_exhibitor_confirmation_links_token
+  ON ExhibitorConfirmationLinks (token_hash);
+
+CREATE INDEX idx_exhibitor_confirmation_events_order
+  ON ExhibitorConfirmationEvents (project_id, order_id, created_at DESC, id DESC);
+
+INSERT INTO Projects (id, name, year, start_date, end_date) VALUES
+  (1, 'Local Demo Expo 2026', 2026, '2026-05-18', '2026-05-20');
+
+INSERT INTO Staff (name, password, role, target, display_order) VALUES
+  ('admin', 'pbkdf2_sha256$100000$c78b217e4218a8501106ee8f41b26284$f48276e63fd93dce37b28946f246274729959e47907f6e58af38697300eb036e', 'super_admin', 12, 0),
+  ('sales01', 'pbkdf2_sha256$100000$a4c1b65b93f5d928e8c5d447730cc63a$2b5e612763e8dda110be23ed9f52ffd2fd69f9a2c0509006856541b41077cc63', 'user', 8, 1),
+  ('expo01', 'pbkdf2_sha256$100000$3f67736702effa5c2ed7b78b8b3fbb1b$8eb796166e83b87f0426f3000b4ad29ced9e5cbb4c67b4d55bd8fc28e68dfdf2', 'exhibition_manager', 0, 2);
+
+INSERT INTO Accounts (project_id, account_name, bank_name, account_no) VALUES
+  (1, 'Demo Company', 'ICBC', '6222000000000001'),
+  (1, 'WeChat Collection', 'WeChat', '');
+
+INSERT INTO Industries (project_id, industry_name) VALUES
+  (1, 'Aquatic Products'),
+  (1, 'Cold Chain Equipment'),
+  (1, 'Marine Technology');
+
+INSERT INTO Prices (project_id, booth_type, price) VALUES
+  (1, '标摊', 9800),
+  (1, '豪标', 12800),
+  (1, '光地', 1000);
+
+INSERT INTO ExhibitionRefrigeratorConfigs (project_id, style_name, spec, image_key, unit_price, stock_quantity, is_active, display_order) VALUES
+  (1, '立式双门冰柜', '1200L / 双门 / 220V', NULL, 1800, 12, 1, 1),
+  (1, '卧式冷冻柜', '900L / 推拉门 / 220V', NULL, 1200, 18, 1, 2);
+
+INSERT INTO BoothMaps (
+  id, project_id, name, background_image_key, scale_pixels_per_meter, default_stroke_width,
+  canvas_width, canvas_height, viewport_x, viewport_y, viewport_zoom,
+  calibration_json, display_config_json, created_at, updated_at
+) VALUES (
+  1, 1, '1号馆主图', NULL, 42.5, 2.5,
+  1600, 900, 80, 60, 1,
+  '{"start":{"x":120,"y":120},"end":{"x":247.5,"y":120},"meters":3}',
+  '{"standard":{"boothNo":{"anchorX":0.5,"anchorY":0.2,"fontSize":18,"visible":true},"company":{"anchorX":0.5,"anchorY":0.6,"fontSize":14,"visible":true}},"ground":{"boothNo":{"anchorX":0.5,"anchorY":0.18,"fontSize":20,"visible":true},"company":{"anchorX":0.5,"anchorY":0.58,"fontSize":16,"visible":true},"size":{"anchorX":0.84,"anchorY":0.13,"fontSize":13,"visible":true}}}',
+  datetime('now', '+8 hours'), datetime('now', '+8 hours')
+);
+
+INSERT INTO Booths (
+  id, project_id, hall, type, area, price_unit, base_price, status,
+  width_m, height_m, opening_type, booth_map_id, source
+) VALUES
+  ('1A01', 1, '1号馆', '标摊', 9, '个', 0, '已预订', 3, 3, '单开口', 1, 'map'),
+  ('1A02', 1, '1号馆', '标摊', 9, '个', 0, '已预订', 3, 3, '双开口', 1, 'map'),
+  ('1B01', 1, '1号馆', '豪标', 9, '个', 0, '可售', 3, 3, '三开口', 1, 'map'),
+  ('2C01', 1, '2号馆', '光地', 36, '平米', 0, '已成交', 6, 6, NULL, 1, 'map');
+
+INSERT INTO BoothMapItems (
+  project_id, map_id, booth_code, hall, booth_type, opening_type,
+  width_m, height_m, area, x, y, rotation, stroke_width,
+  shape_type, points_json, label_style_json, z_index, hidden, created_at, updated_at
+) VALUES
+  (
+    1, 1, '1A01', '1号馆', '标摊', '单开口',
+    3, 3, 9, 240, 180, 0, 2,
+    'rect', '[]',
+    '{"boothNo":{"anchorX":0.5,"anchorY":0.2,"fontSize":18,"rotation":0,"visible":true},"company":{"anchorX":0.5,"anchorY":0.6,"fontSize":14,"rotation":0,"visible":true}}',
+    1, 0, datetime('now', '+8 hours'), datetime('now', '+8 hours')
+  ),
+  (
+    1, 1, '1A02', '1号馆', '标摊', '双开口',
+    3, 3, 9, 390, 180, 0, 2,
+    'rect', '[]',
+    '{"boothNo":{"anchorX":0.5,"anchorY":0.2,"fontSize":18,"rotation":0,"visible":true},"company":{"anchorX":0.5,"anchorY":0.6,"fontSize":14,"rotation":0,"visible":true}}',
+    2, 0, datetime('now', '+8 hours'), datetime('now', '+8 hours')
+  ),
+  (
+    1, 1, '1B01', '1号馆', '豪标', '三开口',
+    3, 3, 9, 540, 180, 0, 2,
+    'rect', '[]',
+    '{"boothNo":{"anchorX":0.5,"anchorY":0.2,"fontSize":18,"rotation":0,"visible":true},"company":{"anchorX":0.5,"anchorY":0.6,"fontSize":14,"rotation":0,"visible":true}}',
+    3, 0, datetime('now', '+8 hours'), datetime('now', '+8 hours')
+  ),
+  (
+    1, 1, '2C01', '2号馆', '光地', NULL,
+    6, 6, 36, 240, 380, 0, 3,
+    'rect', '[]',
+    '{"boothNo":{"anchorX":0.5,"anchorY":0.2,"fontSize":20,"rotation":0,"visible":true},"company":{"anchorX":0.5,"anchorY":0.58,"fontSize":16,"rotation":0,"visible":true}}',
+    4, 0, datetime('now', '+8 hours'), datetime('now', '+8 hours')
+  );
+
+INSERT INTO Orders (
+  id, project_id, company_name, credit_code, no_code_checked, category, main_business,
+  is_agent, agent_name, contact_person, phone, region, booth_id, area, price_unit,
+  unit_price, total_booth_fee, discount_reason, other_income, fees_json, profile,
+  total_amount, paid_amount, contract_url, booth_display_name, sales_name, status, created_at
+) VALUES
+  (
+    1, 1, '海渔集团', '91350000DEMO00001', 0, 'Aquatic Products', '海洋食品加工',
+    0, '', '陈经理', '13800000001', '福建省 - 福州市 - 鼓楼区', '1A01', 9, '个',
+    9800, 9800, '', 0, '[]', '海洋食品企业',
+    9800, 3000, NULL, '海渔集团', 'sales01', '正常', datetime('now', '+8 hours')
+  ),
+  (
+    2, 1, '远洋设备', '91350000DEMO00002', 0, 'Cold Chain Equipment', '冷链设备',
+    0, '', '林总', '13800000002', '浙江 - 宁波', '1A02', 9, '个',
+    9800, 9800, '', 0, '[]', '冷链设备企业',
+    9800, 0, NULL, '远洋设备', 'admin', '正常', datetime('now', '+8 hours')
+  ),
+  (
+    3, 1, '蓝海广场', '91350000DEMO00003', 0, 'Marine Technology', '数字渔业系统',
+    0, '', '王总', '13800000003', '广东 - 深圳', '2C01', 36, '平米',
+    1000, 36000, '', 0, '[]', '数字渔业平台',
+    36000, 36000, NULL, '蓝海广场', 'admin', '正常', datetime('now', '+8 hours')
+  );
+
+INSERT INTO Payments (
+  id, project_id, order_id, amount, payment_time, payer_name, bank_name, remarks, source
+) VALUES
+  (1, 1, 1, 3000, '2026-03-21 10:00:00', '海渔集团', 'Demo Company', '定金', 'MANUAL'),
+  (2, 1, 3, 36000, '2026-03-22 14:30:00', '蓝海广场', 'Demo Company', '全款', 'MANUAL');
+
+PRAGMA foreign_keys = ON;

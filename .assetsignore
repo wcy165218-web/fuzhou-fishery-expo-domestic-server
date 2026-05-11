@@ -1,0 +1,12 @@
+_worker.js
+.git/
+.wrangler/
+.wrangler-home/
+README.md
+docs/
+migrations/
+node_modules/
+package-lock.json
+package.json
+wrangler.toml
+wrangler.toml.example

@@ -1,0 +1,35 @@
+name = "fuzhou-fishery-expo-confirmation-preview"
+main = "./_worker.js"
+compatibility_date = "2026-03-20"
+workers_dev = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[secrets]
+required = ["JWT_SECRET"]
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/*"]
+
+[vars]
+CF_ACCOUNT_ID = "bb5582c4aed9457c0c431e8114588ccc"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "exhibition_db_confirmation_preview"
+database_id = "053bb568-4e49-4ac8-a8a9-2836790baa77"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "b114bdacb48b49e59d695bbc2a5f9302"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "expo-confirmation-preview-assets"

@@ -1,0 +1,8 @@
+name = "r2-cleanup-local"
+main = "r2-cleanup-worker.mjs"
+compatibility_date = "2026-04-20"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "expo-contracts"
+remote = true

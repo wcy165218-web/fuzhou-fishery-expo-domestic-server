@@ -1,0 +1,34 @@
+name = "fuzhou-fishery-expo-preview"
+main = "./_worker.js"
+compatibility_date = "2026-03-20"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[secrets]
+required = ["JWT_SECRET"]
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "exhibition_db"
+database_id = "c190ca96-3fa2-48bf-aade-0b995f4f02bd"
+remote = true
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "a26f48b31c124eb6a0f0fc9274134a02"
+remote = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "expo-contracts"
+remote = true

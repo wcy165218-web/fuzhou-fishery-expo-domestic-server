@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>展商信息确认</title>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=20260417-workbench-tabs-1">
+</head>
+<body>
+  <main id="app"></main>
+  <style>
+    :root {
+      color-scheme: light;
+      --brand: #0050b3;
+      --brand-soft: #e6f4ff;
+      --brand-ring: rgba(0, 80, 179, 0.18);
+      --warning: #fa8c16;
+      --danger: #e11d48;
+      --ink: #262626;
+      --text: #595959;
+      --muted: #8c8c8c;
+      --line: #e5e7eb;
+      --soft: #f7faff;
+      --page-bg: #f0f4f8;
+      --radius: 12px;
+      --shadow-soft: 0 2px 12px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--page-bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button, input, textarea { font: inherit; }
+    .confirm-page { min-height: 100vh; background: var(--page-bg); }
+    .confirm-hero {
+      position: relative;
+      min-height: 280px;
+      overflow: hidden;
+      padding: 36px 20px 112px;
+      color: #fff;
+      background: linear-gradient(120deg, #0f172a 0%, #172554 58%, #1d4ed8 100%);
+    }
+    .confirm-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.36));
+      pointer-events: none;
+    }
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(896px, 100%);
+      margin: 0 auto;
+    }
+    .hero-project {
+      font-size: 12px;
+      letter-spacing: .18em;
+      color: #dbeafe;
+    }
+    .hero-title {
+      margin: 12px 0 0;
+      max-width: 760px;
+      font-size: clamp(26px, 4vw, 38px);
+      line-height: 1.24;
+      font-weight: 600;
+      letter-spacing: 0;
+      color: #fff;
+    }
+    .confirm-hero.has-banner {
+      min-height: 420px;
+      padding: 34px 20px 116px;
+      background: #0f172a;
+    }
+    .confirm-hero.has-banner::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background:
+        linear-gradient(90deg, rgba(15, 23, 42, .62) 0%, rgba(15, 23, 42, .22) 48%, rgba(15, 23, 42, .50) 100%),
+        linear-gradient(180deg, rgba(15, 23, 42, .24) 0%, rgba(15, 23, 42, .18) 54%, rgba(15, 23, 42, .58) 100%);
+      pointer-events: none;
+    }
+    .confirm-hero.has-banner::after {
+      z-index: 1;
+      background: linear-gradient(180deg, rgba(240, 244, 248, 0) 58%, rgba(240, 244, 248, .16) 76%, var(--page-bg) 100%);
+    }
+    .confirm-hero.has-banner .hero-inner {
+      z-index: 2;
+    }
+    .confirm-hero.has-banner .hero-project,
+    .confirm-hero.has-banner .hero-title {
+      text-shadow: 0 2px 18px rgba(15, 23, 42, .42);
+    }
+    .confirm-banner-frame {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0f172a;
+    }
+    .confirm-banner {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      opacity: .92;
+      filter: saturate(1.04);
+    }
+    .card-wrap {
+      width: min(896px, calc(100% - 32px));
+      margin: -76px auto 40px;
+      position: relative;
+      z-index: 2;
+    }
+    .confirm-card {
+      overflow: hidden;
+      border: 1px solid rgba(226, 232, 240, 0.86);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--shadow-soft);
+    }
+    .card-body { padding: clamp(20px, 3.8vw, 30px); }
+    .content-panel {
+      border: 1px solid #edf2f7;
+      border-radius: var(--radius);
+      background: #fff;
+      padding: clamp(16px, 2.8vw, 22px);
+    }
+    .content-panel + .content-panel { margin-top: 20px; }
+    .content-panel.readonly-panel {
+      background: #fbfdff;
+    }
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 16px;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 600;
+    }
+    .panel-heading::before {
+      content: "";
+      width: 4px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--brand);
+    }
+	    .notice {
+	      display: flex;
+	      gap: 12px;
+	      align-items: flex-start;
+	      margin-top: 14px;
+      border: 1px solid #bae0ff;
+      border-radius: 10px;
+	      background: #f0f7ff;
+	      padding: 13px 14px;
+	      color: #174ea6;
+	      font-size: 14px;
+	      line-height: 1.75;
+	    }
+    .notice.readonly {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+      color: #1e3a8a;
+    }
+	    .notice-icon {
+	      flex: 0 0 auto;
+	      width: 21px;
+	      height: 21px;
+	      margin-top: 3px;
+	      color: var(--brand);
+	    }
+	    .deadline-panel {
+	      display: flex;
+	      gap: 14px;
+	      align-items: flex-start;
+	      border: 1px solid #ffd591;
+	      border-radius: 12px;
+	      background: #fffbeb;
+	      box-shadow: 0 2px 10px rgba(250, 140, 22, 0.08);
+	      padding: 17px 18px;
+	      color: #78350f;
+	    }
+	    .deadline-panel.closed {
+	      border-color: #fecdd3;
+	      background: #fff1f2;
+	      box-shadow: 0 2px 10px rgba(190, 18, 60, 0.08);
+	      color: #9f1239;
+	    }
+	    .deadline-panel.missing {
+	      border-color: #fed7aa;
+	      background: #fff7ed;
+	      box-shadow: 0 2px 10px rgba(234, 88, 12, 0.08);
+	      color: #9a3412;
+	    }
+	    .deadline-icon {
+	      display: inline-flex;
+	      flex: 0 0 auto;
+	      align-items: center;
+	      justify-content: center;
+	      width: 38px;
+	      height: 38px;
+	      border-radius: 10px;
+	      background: #fff0d6;
+	      color: var(--warning);
+	    }
+	    .deadline-icon svg {
+	      width: 21px;
+	      height: 21px;
+	    }
+	    .deadline-content {
+	      min-width: 0;
+	    }
+	    .deadline-eyebrow {
+	      color: #92400e;
+	      font-size: 12px;
+	      font-weight: 600;
+	      line-height: 1.5;
+	    }
+	    .deadline-time {
+	      margin-top: 3px;
+	      font-size: clamp(19px, 3vw, 28px);
+	      line-height: 1.25;
+	      font-weight: 600;
+	      letter-spacing: 0;
+	    }
+	    .deadline-countdown {
+	      margin-top: 7px;
+	      color: #9a3412;
+	      font-size: 14px;
+	      line-height: 1.7;
+	    }
+	    .deadline-countdown strong {
+	      color: var(--warning);
+	      font-weight: 700;
+	    }
+	    .deadline-panel.closed .deadline-countdown strong { color: #be123c; }
+	    .deadline-panel.missing .deadline-countdown strong { color: #c2410c; }
+	    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 32px;
+    }
+    .meta-label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .meta-value {
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    .section { margin-top: 26px; }
+    .section-title {
+      margin: 0 0 12px;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.4;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+    .booth-table-wrap {
+      overflow-x: auto;
+      border: 1px solid #f0f2f5;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .booth-table {
+      width: 100%;
+      min-width: 620px;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+    .booth-table thead { background: #fafafa; color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+    .booth-table th, .booth-table td { padding: 13px 16px; border-bottom: 1px solid #f5f5f5; }
+    .booth-table th { font-weight: 600; }
+    .booth-table td:last-child, .booth-table th:last-child { text-align: right; }
+    .empty-text { color: #94a3b8; font-size: 14px; }
+	    .field-grid {
+	      display: grid;
+	      grid-template-columns: 1fr;
+	      gap: 24px;
+	    }
+    .field-block {
+      min-width: 0;
+      padding: 0;
+      background: #fff;
+    }
+	    .field-head {
+	      margin-bottom: 14px;
+	    }
+    .field-title {
+      display: flex;
+      align-items: baseline;
+      gap: 2px;
+      margin: 0;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+    .required-mark {
+      color: var(--danger);
+      font-size: 17px;
+      line-height: 1;
+    }
+	    .field-hint {
+	      margin: 7px 0 0;
+	      color: var(--muted);
+	      font-size: 13px;
+	      line-height: 1.8;
+    }
+    .control-wrap {
+      position: relative;
+    }
+    .confirm-control {
+      display: block;
+      width: 100%;
+      border: 1px solid #d9e2ec;
+      border-radius: 10px;
+      background: #fbfdff;
+      color: var(--ink);
+      padding: 12px 14px;
+      font-size: 14px;
+      line-height: 1.65;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+    }
+    .confirm-control:hover:not(:disabled) {
+      border-color: #91caff;
+      background: #fff;
+    }
+	    .confirm-control:focus {
+	      border-color: var(--brand);
+	      background: #fff;
+	      box-shadow: 0 0 0 3px var(--brand-ring);
+	    }
+    .confirm-control.is-invalid {
+      border-color: var(--danger);
+      background: #fff7f8;
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14);
+      animation: invalidPulse .9s ease;
+    }
+    @keyframes invalidPulse {
+      0%, 100% { transform: translateX(0); }
+      18%, 54% { transform: translateX(-3px); }
+      36%, 72% { transform: translateX(3px); }
+    }
+    .confirm-control:disabled {
+      cursor: not-allowed;
+      border-color: #e5e7eb;
+      background: #f1f5f9;
+      color: #64748b;
+    }
+    textarea.confirm-control {
+      min-height: 144px;
+      resize: vertical;
+    }
+    .char-counter {
+      margin-top: 6px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .char-counter.is-near-limit { color: #c2410c; }
+    .char-counter.is-over-limit { color: var(--danger); }
+    .lintel-list {
+      display: grid;
+      gap: 16px;
+    }
+    .lintel-row {
+      border: 1px solid #edf2f7;
+      border-radius: 12px;
+      background: #fcfdff;
+      padding: 16px;
+    }
+    .lintel-top {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .lintel-title {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .lock-chip {
+      border-radius: 999px;
+      background: #f1f5f9;
+      padding: 5px 10px;
+      color: #64748b;
+      font-size: 12px;
+    }
+	    .control-label {
+	      display: flex;
+	      align-items: baseline;
+	      gap: 4px;
+	      margin: 16px 0 8px;
+	      color: var(--text);
+	      font-size: 13px;
+	      line-height: 1.5;
+    }
+    .submit-button {
+      display: block;
+      width: 100%;
+      margin-top: 30px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0068d9, var(--brand));
+      color: #fff;
+      padding: 16px 22px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(0, 80, 179, 0.18);
+      transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+    }
+    .submit-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(0, 80, 179, 0.24);
+    }
+	    .submit-button:disabled {
+	      cursor: wait;
+	      opacity: .68;
+	      transform: none;
+	      box-shadow: none;
+	    }
+	    .submit-button[aria-busy="true"] {
+	      cursor: not-allowed;
+	      opacity: .72;
+	    }
+	    .submit-button.success {
+	      background: linear-gradient(135deg, #16a34a, #15803d);
+	      box-shadow: 0 16px 34px rgba(22, 163, 74, 0.20);
+	    }
+	    .submit-button.success:disabled {
+	      cursor: default;
+	      opacity: 1;
+	    }
+	    .submit-content {
+	      display: inline-flex;
+	      align-items: center;
+	      justify-content: center;
+	      gap: 9px;
+	    }
+	    .submit-spinner {
+	      width: 17px;
+	      height: 17px;
+	      border-radius: 999px;
+	      border: 2px solid rgba(255, 255, 255, 0.38);
+	      border-top-color: #fff;
+	      animation: spin .8s linear infinite;
+	    }
+	    @keyframes spin { to { transform: rotate(360deg); } }
+    .readonly-summary {
+      margin-top: 30px;
+      border-radius: 10px;
+      background: #f1f5f9;
+      padding: 16px;
+      color: #64748b;
+      text-align: center;
+      font-size: 14px;
+    }
+    .inline-toast {
+      position: fixed;
+      left: 50%;
+      top: 18px;
+      z-index: 40;
+      width: min(520px, calc(100% - 32px));
+      transform: translateX(-50%);
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      background: #eff6ff;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+      color: #1e3a8a;
+      padding: 13px 16px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .inline-toast.error {
+      border-color: #fecdd3;
+      background: #fff1f2;
+      color: #be123c;
+    }
+    .confirm-dialog-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.52);
+      padding: 20px;
+      backdrop-filter: blur(4px);
+    }
+    .confirm-dialog {
+      width: min(440px, 100%);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 54px rgba(15, 23, 42, 0.20);
+      padding: 24px;
+    }
+    .confirm-dialog h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+    .confirm-dialog p {
+      margin: 12px 0 0;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .dialog-button {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 17px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dialog-button.secondary {
+      background: #f1f5f9;
+      color: #334155;
+    }
+    .dialog-button.primary {
+      background: var(--brand);
+      color: #fff;
+    }
+    .error-shell {
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--page-bg);
+    }
+    .error-card {
+      width: min(520px, 100%);
+      border: 1px solid #fecdd3;
+      border-radius: 14px;
+      background: #fff1f2;
+      padding: 32px;
+      text-align: center;
+      color: #be123c;
+      box-shadow: 0 10px 28px rgba(190, 18, 60, .08);
+    }
+    .error-card h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .error-card p {
+      margin: 16px 0 0;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+	    @media (min-width: 760px) {
+	      .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	    }
+	    @media (max-width: 720px) {
+	      .confirm-hero { min-height: 238px; padding: 28px 16px 92px; }
+	      .confirm-hero.has-banner { min-height: 310px; padding: 26px 16px 88px; }
+	      .card-wrap { width: min(100% - 24px, 896px); margin-top: -58px; }
+	      .confirm-card { border-radius: 14px; }
+	      .summary-grid, .field-grid { grid-template-columns: 1fr; }
+	      .field-grid { gap: 22px; }
+	      .card-body { padding: 22px 18px; }
+	      .deadline-panel { padding: 15px; gap: 12px; }
+	      .deadline-icon { width: 34px; height: 34px; border-radius: 10px; }
+        .content-panel { padding: 16px; }
+        .booth-table-wrap {
+          overflow-x: visible;
+          border: 0;
+          background: transparent;
+        }
+        .booth-table {
+          min-width: 0;
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        .booth-table thead {
+          display: none;
+        }
+        .booth-table tbody {
+          display: grid;
+          gap: 10px;
+        }
+        .booth-table tr {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          overflow: hidden;
+          border: 1px solid #edf2f7;
+          border-radius: 10px;
+          background: #fff;
+        }
+        .booth-table th,
+        .booth-table td {
+          min-width: 0;
+          border-bottom: 1px solid #f5f5f5;
+          padding: 10px 12px;
+          text-align: left;
+          line-height: 1.45;
+          word-break: break-word;
+        }
+        .booth-table td:nth-child(odd) {
+          border-right: 1px solid #f5f5f5;
+        }
+        .booth-table td:nth-last-child(-n + 2) {
+          border-bottom: 0;
+        }
+        .booth-table td:last-child,
+        .booth-table th:last-child {
+          text-align: left;
+        }
+        .booth-table td::before {
+          content: attr(data-label);
+          display: block;
+          margin-bottom: 3px;
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.3;
+        }
+        .dialog-actions { flex-direction: column-reverse; }
+        .dialog-button { width: 100%; }
+	    }
+  </style>
+  <script>
+	    function readConfirmationTokenFromLocation() {
+	      const queryToken = new URLSearchParams(location.search).get('token') || '';
+	      if (queryToken) return queryToken;
+	      const path = decodeURIComponent(location.pathname || '').replace(/^\/+|\/+$/g, '');
+	      if (!path || path === 'exhibitor-confirm' || path === 'exhibitor-confirm.html') return '';
+	      const prefixedMatch = path.match(/^Exhibitors-confirmation\/([^/.]+)$/i);
+	      if (prefixedMatch) return prefixedMatch[1];
+	      if (path.includes('/') || path.includes('.')) return '';
+	      return path;
+	    }
+	    const state = {
+	      token: readConfirmationTokenFromLocation(),
+	      data: null,
+	      deadlineTimer: null,
+	      settingsSyncTimer: null
+	    };
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const parseChinaTime = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const timestamp = Date.parse(`${text.replace(' ', 'T')}+08:00`);
+      return Number.isFinite(timestamp) ? timestamp : null;
+    };
+    const formatChinaTime = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const [date = '', time = ''] = text.split(' ');
+      const [year, month, day] = date.split('-');
+      return year && month && day ? `${Number(year)}年${Number(month)}月${Number(day)}日 ${time.slice(0, 5)}` : text;
+    };
+	    const formatCountdown = (targetMs, expiredText = '已到期') => {
+	      const diffMs = Number(targetMs || 0) - Date.now();
+	      if (!Number.isFinite(diffMs) || diffMs <= 0) return expiredText;
+	      const totalSeconds = Math.floor(diffMs / 1000);
+	      const days = Math.floor(totalSeconds / 86400);
+	      const hours = Math.floor((totalSeconds % 86400) / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      if (days > 0) return `${days}天 ${hours}小时 ${minutes}分钟`;
+	      if (hours > 0) return `${hours}小时 ${minutes}分钟 ${seconds}秒`;
+	      return `${minutes}分钟 ${seconds}秒`;
+	    };
+	    function getCollectionDeadline(data = state.data) {
+	      return String(data?.link?.collection_deadline_at || data?.settings?.collection_deadline_at || '').trim();
+	    }
+	    function getCollectionDeadlineDisplay(data = state.data) {
+	      return String(data?.link?.collection_deadline_display || data?.settings?.collection_deadline_display || '').trim();
+	    }
+	    function hasSubmitted(data = state.data) {
+	      return !!String(data?.link?.submitted_at || data?.order?.submitted_at || '').trim();
+	    }
+	    function buildDeadlinePanel(data = state.data) {
+	      const deadlineValue = getCollectionDeadline(data);
+	      const deadlineText = getCollectionDeadlineDisplay(data) || formatChinaTime(deadlineValue);
+	      if (!deadlineText) {
+	        return `
+	          <div class="deadline-panel missing">
+	            ${hourglassIcon()}
+	            <div class="deadline-content">
+	              <div class="deadline-eyebrow">信息收集截止时间</div>
+	              <div id="collection-deadline-time" class="deadline-time">暂未设置</div>
+	              <div class="deadline-countdown">请联系组委会确认截止时间；后台保存后本页会自动同步。</div>
+	            </div>
+	          </div>
+	        `;
+	      }
+	      const targetMs = parseChinaTime(deadlineValue);
+	      const collectionClosed = !!data?.link?.collection_closed;
+	      const countdownText = targetMs ? formatCountdown(targetMs, '已截止') : '-';
+	      return `
+	        <div class="deadline-panel ${collectionClosed ? 'closed' : ''}">
+	          ${hourglassIcon()}
+	          <div class="deadline-content">
+	            <div class="deadline-eyebrow">${collectionClosed ? '信息收集已截止' : '信息收集截止时间'}</div>
+	            <div id="collection-deadline-time" class="deadline-time">${escapeHtml(deadlineText)}</div>
+	            <div class="deadline-countdown">${collectionClosed ? '当前状态 ' : '距离截止还有 '}<strong id="collection-deadline-countdown">${escapeHtml(countdownText)}</strong></div>
+	          </div>
+	        </div>
+	      `;
+	    }
+	    function startDeadlineCountdown() {
+	      clearInterval(state.deadlineTimer);
+	      const node = document.getElementById('collection-deadline-countdown');
+	      const targetMs = parseChinaTime(getCollectionDeadline(state.data));
+	      if (!node || !targetMs) return;
+	      const tick = () => {
+	        node.textContent = formatCountdown(targetMs, '已截止');
+	      };
+	      tick();
+	      state.deadlineTimer = setInterval(tick, 1000);
+	    }
+	    async function fetchOverview() {
+	      return readJson(await fetch(`/api/public/exhibitor-confirmations/${encodeURIComponent(state.token)}`));
+	    }
+	    async function syncDeadlineSettings() {
+	      if (!state.token || !state.data || hasSubmitted(state.data)) return;
+	      try {
+	        const previousDeadline = getCollectionDeadline(state.data);
+	        const previousReadonly = !!state.data?.link?.readonly;
+	        const previousClosed = !!state.data?.link?.collection_closed;
+	        const fresh = await fetchOverview();
+	        const nextDeadline = getCollectionDeadline(fresh);
+	        const nextReadonly = !!fresh?.link?.readonly;
+	        const nextClosed = !!fresh?.link?.collection_closed;
+	        if (nextReadonly !== previousReadonly || nextClosed !== previousClosed) {
+	          renderPage(fresh);
+	          showInlineMessage(nextClosed ? '信息收集已截止，当前仅可查看。' : '信息收集已重新开放。');
+	          return;
+	        }
+	        if (nextDeadline !== previousDeadline) {
+	          state.data.settings = fresh.settings || state.data.settings;
+	          state.data.link = { ...(state.data.link || {}), ...(fresh.link || {}) };
+	          state.data.settings = { ...(state.data.settings || {}), ...(fresh.settings || {}) };
+	          const slot = document.getElementById('deadline-panel-slot');
+	          if (slot) slot.innerHTML = buildDeadlinePanel(state.data);
+	          startDeadlineCountdown();
+	          showInlineMessage('信息收集截止时间已更新。');
+	        }
+	      } catch (error) {
+	        console.warn('Sync confirmation deadline failed:', error);
+	      }
+	    }
+	    function startDeadlineSettingsSync() {
+	      clearInterval(state.settingsSyncTimer);
+	      if (!state.token || hasSubmitted(state.data)) return;
+	      state.settingsSyncTimer = setInterval(syncDeadlineSettings, 30000);
+	    }
+    const formatArea = (value) => {
+      const amount = Number(value || 0);
+      if (!Number.isFinite(amount)) return '0';
+      if (Number.isInteger(amount)) return String(amount);
+      return amount.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    };
+    const countCharacters = (value) => Array.from(String(value || '')).length;
+    async function readJson(response) {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success === false) throw new Error(data?.error || '请求失败');
+      return data;
+    }
+	    function requiredMark() {
+	      return '<span class="required-mark" aria-label="必填">*</span>';
+	    }
+	    function hourglassIcon() {
+	      return '<span class="deadline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6.5 3.75h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M6.5 20.25h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M8 3.75v3.2c0 1.13.47 2.2 1.3 2.96L12 12.4l2.7-2.49A4 4 0 0 0 16 6.95v-3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 20.25v-3.2c0-1.13.47-2.2 1.3-2.96L12 11.6l2.7 2.49A4 4 0 0 1 16 17.05v3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+	    }
+	    function noticeIcon() {
+	      return '<svg class="notice-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.25" stroke="currentColor" stroke-width="1.9"/><path d="M12 10.75v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 7.75h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+	    }
+	    function showInlineMessage(message, type = 'info') {
+      const existing = document.getElementById('inline-toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.id = 'inline-toast';
+      toast.className = `inline-toast ${type === 'error' ? 'error' : ''}`;
+      toast.textContent = message || '操作失败，请稍后再试';
+      document.body.appendChild(toast);
+	      clearTimeout(state.toastTimer);
+	      state.toastTimer = setTimeout(() => toast.remove(), 3600);
+	    }
+    function updateCharacterCounter(control) {
+      if (!control?.dataset?.counterTarget) return;
+      const key = control.dataset.counterTarget;
+      const counter = document.querySelector(`[data-counter-for="${key}"]`);
+      if (!counter) return;
+      const current = countCharacters(control.value);
+      const max = Number(control.getAttribute('maxlength') || control.dataset.maxLength || 0);
+      counter.textContent = max ? `${current}/${max} 字` : `${current} 字`;
+      counter.classList.toggle('is-near-limit', !!max && current >= Math.floor(max * 0.85));
+      counter.classList.toggle('is-over-limit', !!max && current > max);
+    }
+    function initFieldFeedback() {
+      document.querySelectorAll('.confirm-control').forEach((control) => {
+        updateCharacterCounter(control);
+        control.addEventListener('input', () => {
+          control.classList.remove('is-invalid');
+          updateCharacterCounter(control);
+        });
+      });
+    }
+    function markInvalidFields(controls) {
+      const invalidControls = controls.filter((control) => control && !String(control.value || '').trim());
+      invalidControls.forEach((control) => {
+        control.classList.remove('is-invalid');
+        void control.offsetWidth;
+        control.classList.add('is-invalid');
+      });
+      const first = invalidControls[0];
+      if (first) {
+        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          try { first.focus({ preventScroll: true }); } catch (error) { first.focus(); }
+        }, 360);
+      }
+      return invalidControls.length;
+    }
+	    function setSubmitButtonState(button, stateName) {
+	      if (!button) return;
+	      button.classList.remove('success');
+	      button.removeAttribute('aria-busy');
+	      if (stateName === 'loading') {
+	        button.disabled = true;
+	        button.setAttribute('aria-busy', 'true');
+	        button.innerHTML = '<span class="submit-content"><span class="submit-spinner" aria-hidden="true"></span><span>提交中...</span></span>';
+	        return;
+	      }
+	      if (stateName === 'success') {
+	        button.disabled = true;
+	        button.classList.add('success');
+	        button.innerHTML = '<span class="submit-content"><svg viewBox="0 0 24 24" fill="none" width="18" height="18" aria-hidden="true"><path d="m5.5 12.5 4.1 4.1 8.9-9.2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>提交成功</span></span>';
+	        return;
+	      }
+	      button.disabled = false;
+	      button.innerHTML = '<span class="submit-content"><span>提交确认</span></span>';
+	    }
+	    function confirmSubmitInline() {
+	      return new Promise((resolve) => {
+	        const existing = document.getElementById('submit-confirm-dialog');
+        if (existing) existing.remove();
+        const mask = document.createElement('div');
+        mask.id = 'submit-confirm-dialog';
+        mask.className = 'confirm-dialog-mask';
+	        mask.innerHTML = `
+	          <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title">
+	            <h2 id="submit-confirm-title">确认提交信息吗？</h2>
+	            <p>提交后您的楣板信息将被锁定并下发制作，如需再改只能联系组委会，请最后检查一遍是否有错别字。</p>
+	            <div class="dialog-actions">
+	              <button type="button" class="dialog-button secondary" data-cancel-submit>再检查一下</button>
+	              <button type="button" class="dialog-button primary" data-confirm-submit>我已核对无误，提交</button>
+	            </div>
+	          </div>
+	        `;
+        const finish = (value) => {
+          mask.remove();
+          resolve(value);
+        };
+        mask.addEventListener('click', (event) => {
+          if (event.target === mask || event.target.closest('[data-cancel-submit]')) finish(false);
+          if (event.target.closest('[data-confirm-submit]')) finish(true);
+        });
+        document.body.appendChild(mask);
+      });
+    }
+    function renderError(message) {
+      document.getElementById('app').innerHTML = `
+        <section class="error-shell">
+          <div class="error-card">
+            <h1>链接暂不可用</h1>
+            <p>${escapeHtml(message || '链接无效或已过期，请联系业务员重新获取。')}</p>
+          </div>
+        </section>
+      `;
+    }
+    function buildBoothSummary(rows = []) {
+      if (!rows.length) return '<div class="empty-text">暂无展位信息</div>';
+      return `
+        <div class="booth-table-wrap">
+          <table class="booth-table">
+            <thead>
+              <tr><th>馆号</th><th>展位号</th><th>展位类型</th><th>面积</th></tr>
+            </thead>
+            <tbody>
+              ${rows.map((row) => `<tr><td data-label="馆号">${escapeHtml(row.hall || '-')}</td><td data-label="展位号">${escapeHtml(row.booth_code || '-')}</td><td data-label="展位类型">${escapeHtml(row.booth_type_label || row.booth_type || '-')}</td><td data-label="面积">${formatArea(row.area)}㎡</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    function countedTextarea({ id, value = '', readonly = false, maxLength = 300, minHeight = '', marker = '' }) {
+      const safeId = escapeHtml(id);
+      const style = minHeight ? ` style="min-height:${escapeHtml(minHeight)}"` : '';
+      const markerAttr = marker ? ` ${marker}` : '';
+      return `
+        <div class="control-wrap">
+          <textarea id="${safeId}" maxlength="${Number(maxLength)}" data-counter-target="${safeId}" data-max-length="${Number(maxLength)}"${markerAttr} ${readonly ? 'disabled' : ''} class="confirm-control"${style}>${escapeHtml(value)}</textarea>
+          <div class="char-counter" data-counter-for="${safeId}">${countCharacters(value)}/${Number(maxLength)} 字</div>
+        </div>
+      `;
+    }
+    function countedInput({ key, value = '', readonly = false, maxLength = 30, marker = '' }) {
+      const safeKey = escapeHtml(key);
+      const markerAttr = marker ? ` ${marker}` : '';
+      return `
+        <div class="control-wrap">
+          <input value="${escapeHtml(value)}" maxlength="${Number(maxLength)}" data-counter-target="${safeKey}" data-max-length="${Number(maxLength)}"${markerAttr} ${readonly ? 'disabled' : ''} class="confirm-control">
+          <div class="char-counter" data-counter-for="${safeKey}">${countCharacters(value)}/${Number(maxLength)} 字</div>
+        </div>
+      `;
+    }
+    function fieldBlock({ title, hint, required = true, body }) {
+      return `
+        <section class="field-block">
+          <div class="field-head">
+            <h2 class="field-title">${escapeHtml(title)}${required ? requiredMark() : ''}</h2>
+            <p class="field-hint">${escapeHtml(hint || '')}</p>
+          </div>
+          ${body}
+        </section>
+      `;
+    }
+    function buildLintelEditor(lintels = [], readonly) {
+      if (!lintels.length) return '';
+      return fieldBlock({
+        title: '楣板信息确认',
+        hint: '请确认现场楣板制作文字。中文楣板必填，英文楣板如有请填写；现场拆改将会收取拆改费。',
+        required: true,
+        body: `<div class="lintel-list">${lintels.map((lintel, index) => {
+          const locked = readonly || !lintel.can_external_edit;
+          const boothSlug = String(lintel.booth_code || 'booth').replace(/[^a-zA-Z0-9_-]+/g, '-');
+          const counterBase = `lintel-${index}-${boothSlug}`;
+          return `
+            <div class="lintel-row" data-lintel-row data-booth-code="${escapeHtml(lintel.booth_code || '')}">
+              <div class="lintel-top">
+                <div class="lintel-title">展位 ${escapeHtml(lintel.booth_code || '-')}</div>
+                ${lintel.external_lock_reason ? `<div class="lock-chip">${escapeHtml(lintel.external_lock_reason)}</div>` : ''}
+              </div>
+              <label class="control-label">中文楣板名 ${requiredMark()}</label>
+              ${countedInput({ key: `${counterBase}-zh`, value: lintel.name_zh || '', readonly: locked, maxLength: 30, marker: 'data-lintel-name-zh' })}
+              <label class="control-label">英文楣板名（如有）</label>
+              ${countedInput({ key: `${counterBase}-en`, value: lintel.name_en || '', readonly: locked, maxLength: 80, marker: 'data-lintel-name-en' })}
+              <label class="control-label">备注</label>
+              ${countedTextarea({ id: `${counterBase}-remark`, value: lintel.remark || '', readonly: locked, maxLength: 120, minHeight: '84px', marker: 'data-lintel-remark' })}
+            </div>
+          `;
+        }).join('')}</div>`
+      });
+    }
+    function renderPage(data) {
+      state.data = data;
+      const order = data.order || {};
+	      const readonly = !!data.link?.readonly;
+	      const collectionClosed = !!data.link?.collection_closed;
+	      const submittedText = formatChinaTime(order.submitted_at || data.link?.submitted_at);
+	      const deadlineText = getCollectionDeadlineDisplay(data) || formatChinaTime(getCollectionDeadline(data));
+	      const timeReminder = deadlineText
+	        ? '请在上方截止时间前完成填写并提交。'
+	        : '请尽快完成填写并提交。';
+      document.getElementById('app').innerHTML = `
+        <div class="confirm-page">
+          <header class="confirm-hero${data.settings?.banner_image_url ? ' has-banner' : ''}">
+            <div class="hero-inner">
+              <div class="hero-project">${escapeHtml(data.project?.name || '福州渔博会')}</div>
+              <h1 class="hero-title">${escapeHtml(data.settings?.title_text || '请核对并确认参展信息')}</h1>
+            </div>
+            ${data.settings?.banner_image_url ? `
+              <div class="confirm-banner-frame">
+                <img src="${escapeHtml(data.settings.banner_image_url)}" alt="" class="confirm-banner">
+              </div>
+            ` : ''}
+          </header>
+	          <div class="card-wrap">
+	            <section class="confirm-card">
+	              <div class="card-body">
+                  <section class="content-panel status-panel">
+	                  <div id="deadline-panel-slot">${buildDeadlinePanel(data)}</div>
+	                  ${readonly && submittedText ? `
+                    <div class="notice readonly">
+                      ${noticeIcon()}
+                      <div>您的楣板信息已于 ${escapeHtml(submittedText)} 成功提交并确认。当前页面仅供查看；如需修改，请联系您的组委会联系人，由业务员发起“申请编辑信息”后重新提交。</div>
+                    </div>
+                  ` : collectionClosed ? `
+                    <div class="notice readonly">
+                      ${noticeIcon()}
+                      <div>信息收集已于 ${escapeHtml(deadlineText || '设置的截止时间')} 截止，当前页面仅供查看，不能再编辑或提交。如需处理，请联系组委会联系人。</div>
+                    </div>
+                  ` : `
+	                    <div class="notice">
+	                      ${noticeIcon()}
+	                      <div>${timeReminder}请重点核对带 <span class="required-mark">*</span> 的字段。提交后将无法自行修改，如需修改请联系组委会联系人重新开通编辑。</div>
+	                    </div>
+                  `}
+                  </section>
+                  <section class="content-panel readonly-panel">
+                    <h2 class="panel-heading">基础信息</h2>
+                    <div class="summary-grid">
+                      <div><div class="meta-label">公司名称</div><div class="meta-value">${escapeHtml(order.company_name || '-')}</div></div>
+                    </div>
+                    <section class="section">
+                      <h2 class="section-title">展位信息</h2>
+                      ${buildBoothSummary(data.booth_rows || [])}
+                    </section>
+                  </section>
+                  <section class="content-panel form-panel">
+                    <h2 class="panel-heading">信息填写</h2>
+                    <div class="field-grid">
+                      ${fieldBlock({
+                        title: '详细展品',
+                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
+                        required: true,
+                        body: countedTextarea({ id: 'main-business', value: order.main_business || '', readonly, maxLength: 300 })
+                      })}
+                      ${fieldBlock({
+                        title: '企业简介或产品亮点',
+                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
+                        required: true,
+                        body: countedTextarea({ id: 'profile', value: order.profile || '', readonly, maxLength: 300 })
+                      })}
+                    </div>
+                    <div class="section">
+                      ${buildLintelEditor(data.lintels || [], readonly)}
+                    </div>
+                    ${readonly
+                      ? '<div class="readonly-summary">信息已提交确认，当前为只读概览。</div>'
+	                    : '<button id="submit-btn" type="button" onclick="submitConfirmation()" class="submit-button"><span class="submit-content"><span>提交确认</span></span></button>'}
+                  </section>
+              </div>
+            </section>
+          </div>
+        </div>
+      `;
+	      startDeadlineCountdown();
+	      startDeadlineSettingsSync();
+        initFieldFeedback();
+    }
+    async function loadOverview() {
+      if (!state.token) {
+        renderError('链接缺少安全令牌，请联系业务员重新获取。');
+        return;
+      }
+      try {
+	        renderPage(await fetchOverview());
+      } catch (error) {
+        renderError(error.message);
+      }
+    }
+    async function submitConfirmation() {
+      const mainBusinessControl = document.getElementById('main-business');
+      const profileControl = document.getElementById('profile');
+      const lintelRows = Array.from(document.querySelectorAll('[data-lintel-row]'));
+      const requiredControls = [
+        mainBusinessControl,
+        profileControl,
+        ...lintelRows.map((row) => row.querySelector('[data-lintel-name-zh]'))
+      ];
+      if (markInvalidFields(requiredControls)) {
+        showInlineMessage('请先补全红框标出的必填字段。', 'error');
+        return;
+      }
+      const mainBusiness = mainBusinessControl?.value?.trim() || '';
+      const profile = profileControl?.value?.trim() || '';
+      if (profile.length > 300) {
+        showInlineMessage('企业简介或产品亮点不能超过 300 字。', 'error');
+        return;
+      }
+      const lintels = lintelRows.map((row) => ({
+        booth_code: row.dataset.boothCode || '',
+        name_zh: row.querySelector('[data-lintel-name-zh]')?.value?.trim() || '',
+        name_en: row.querySelector('[data-lintel-name-en]')?.value?.trim() || '',
+        remark: row.querySelector('[data-lintel-remark]')?.value?.trim() || ''
+      }));
+	      if (!(await confirmSubmitInline())) return;
+	      const button = document.getElementById('submit-btn');
+	      setSubmitButtonState(button, 'loading');
+	      try {
+	        const result = await readJson(await fetch(`/api/public/exhibitor-confirmations/${encodeURIComponent(state.token)}/submit`, {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify({ main_business: mainBusiness, profile, lintels })
+	        }));
+	        setSubmitButtonState(button, 'success');
+	        renderPage(result.overview);
+	        window.scrollTo({ top: 0, behavior: 'smooth' });
+	      } catch (error) {
+	        showInlineMessage(error.message || '提交失败', 'error');
+	        setSubmitButtonState(button, 'idle');
+	      }
+    }
+    loadOverview();
+  </script>
+</body>
+</html>
