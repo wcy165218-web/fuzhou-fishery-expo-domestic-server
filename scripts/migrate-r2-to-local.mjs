@@ -439,7 +439,7 @@ function printHelp() {
   node scripts/migrate-r2-to-local.mjs --bucket expo-contracts --root /var/expo-files
 
 Required credentials:
-  CF_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID
+  CF_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_ID (set in your shell or env file)
   R2_ACCESS_KEY_ID or CLOUDFLARE_R2_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID
   R2_SECRET_ACCESS_KEY or CLOUDFLARE_R2_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY
 
@@ -456,12 +456,6 @@ Options:
 `);
 }
 
-function readWranglerAccountId() {
-  return fs.readFile('wrangler.toml', 'utf8')
-    .then((text) => String(text).match(/^\s*CF_ACCOUNT_ID\s*=\s*"([^"]+)"/m)?.[1] || '')
-    .catch(() => '');
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -473,8 +467,7 @@ async function main() {
 
   const accountId = args.accountId
     || process.env.CF_ACCOUNT_ID
-    || process.env.CLOUDFLARE_ACCOUNT_ID
-    || await readWranglerAccountId();
+    || process.env.CLOUDFLARE_ACCOUNT_ID;
   const bucket = args.bucket || process.env.R2_BUCKET || process.env.CLOUDFLARE_R2_BUCKET || DEFAULT_BUCKET;
   const rootDir = args.root || process.env.FILE_STORAGE_ROOT || DEFAULT_STORAGE_ROOT;
   const summary = await migrateR2ToLocal({

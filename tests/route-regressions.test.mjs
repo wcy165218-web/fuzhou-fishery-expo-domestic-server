@@ -71,12 +71,15 @@ function createOrderRouteEnv() {
   };
 }
 
-function createConfigRouteEnv() {
+function createConfigRouteEnv(options = {}) {
   const captured = {
-    batchCalls: []
+    batchCalls: [],
+    firstCalls: [],
+    runCalls: []
   };
   return {
     captured,
+    JWT_SECRET: 'route-regression-secret',
     DB: {
       prepare(query) {
         const sql = String(query || '');
@@ -86,6 +89,17 @@ function createConfigRouteEnv() {
           bind(...params) {
             this.params = params;
             return this;
+          },
+          async first() {
+            captured.firstCalls.push({ sql, params: [...this.params] });
+            if (sql.includes('FROM ProjectErpConfigs')) {
+              return options.erpConfig || null;
+            }
+            return null;
+          },
+          async run() {
+            captured.runCalls.push({ sql, params: [...this.params] });
+            return { meta: { changes: 1 } };
           }
         };
       },
@@ -103,6 +117,9 @@ function createConfigRouteEnv() {
 }
 
 function createOrderedBoothMapRouteEnv() {
+  const captured = {
+    batchCalls: []
+  };
   const existingPointsJson = JSON.stringify([
     { x: 0, y: 0 },
     { x: 1, y: 0 },
@@ -132,10 +149,12 @@ function createOrderedBoothMapRouteEnv() {
     active_order_count: 1
   };
   return {
+    captured,
     DB: {
       prepare(query) {
         const sql = String(query || '');
         return {
+          sql,
           params: [],
           bind(...params) {
             this.params = params;
@@ -160,21 +179,28 @@ function createOrderedBoothMapRouteEnv() {
             if (sql.includes('FROM BoothMapItems bmi')) {
               return { results: [existingItem] };
             }
-            if (sql.includes('SELECT booth_code, hall, booth_type, opening_type')) {
-              return { results: [existingItem] };
+            if (sql.includes('FROM BoothMapItems') && sql.includes('map_id <>')) {
+              return { results: [] };
             }
-            if (sql.includes('FROM Orders')) {
-              return { results: [{ booth_id: '1A01' }] };
+            if (sql.includes('SELECT booth_code') && sql.includes('FROM BoothMapItems')) {
+              return { results: [{ booth_code: existingItem.booth_code }] };
+            }
+            if (sql.includes('SELECT id, booth_id, area, price_unit') && sql.includes('FROM Orders')) {
+              return { results: [{ id: 501, booth_id: '1A01', area: 9, price_unit: '个' }] };
             }
             return { results: [] };
           },
           async run() {
-            throw new Error('ordered booth map save should be blocked before writes');
+            return { meta: { changes: 1 } };
           }
         };
       },
-      async batch() {
-        throw new Error('ordered booth map save should be blocked before batch writes');
+      async batch(statements) {
+        captured.batchCalls.push(statements.map((statement) => ({
+          sql: statement.sql,
+          params: [...statement.params]
+        })));
+        return statements.map(() => ({ meta: { changes: 1 } }));
       }
     }
   };
@@ -367,6 +393,34 @@ async function runTests() {
   assert.equal(clearResponse.status, 410);
   assert.equal(configEnv.captured.batchCalls.length, 0);
   assert.equal(clearPayload.error, '项目业务数据清理入口已停用，请勿通过系统直接清空项目数据');
+
+  const erpConfigEnv = createConfigRouteEnv({
+    erpConfig: {
+      project_id: 7,
+      enabled: 1,
+      endpoint_url: 'https://erp.example.test',
+      water_id: 'water-1',
+      session_cookie: 'JSESSIONID=secret-cookie',
+      expected_project_name: '福州渔博会',
+      use_mock: 0,
+      mock_payload: '',
+      last_sync_at: '',
+      last_sync_summary: ''
+    }
+  });
+  const erpConfigRequest = new Request('http://localhost/api/erp-config?projectId=7', { method: 'GET' });
+  const erpConfigResponse = await handleConfigRoutes({
+    request: erpConfigRequest,
+    env: erpConfigEnv,
+    url: new URL(erpConfigRequest.url),
+    currentUser: { role: 'admin', name: 'admin' },
+    corsHeaders
+  });
+  const erpConfigPayload = await erpConfigResponse.json();
+  assert.equal(erpConfigResponse.status, 200);
+  assert.equal(erpConfigPayload.session_cookie, '');
+  assert.equal(erpConfigPayload.has_session_cookie, true);
+  assert.equal(erpConfigPayload.endpoint_url, 'https://erp.example.test');
 
   const rawUploadBody = new TextEncoder().encode('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF');
   const uploadedObjects = [];
@@ -573,6 +627,7 @@ async function runTests() {
   assert.equal(boothMapMetaEnv.captured.runCalls.length, 1);
   assert.deepEqual(boothMapMetaEnv.captured.cacheDeletes, ['rv:7:3']);
 
+  const orderedBoothMapEnv = createOrderedBoothMapRouteEnv();
   const orderedBoothMapRequest = new Request('http://localhost/api/save-booth-map-items', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -582,7 +637,8 @@ async function runTests() {
       replaceAll: false,
       items: [
         {
-          booth_code: '1A01',
+          booth_code: '1A02',
+          previous_booth_code: '1A01',
           hall: '1号馆',
           booth_type: '标摊',
           opening_type: '单开口',
@@ -601,14 +657,21 @@ async function runTests() {
   });
   const orderedBoothMapResponse = await handleBoothMapRoutes({
     request: orderedBoothMapRequest,
-    env: createOrderedBoothMapRouteEnv(),
+    env: orderedBoothMapEnv,
     url: new URL(orderedBoothMapRequest.url),
     currentUser: { role: 'admin', name: 'admin' },
     corsHeaders
   });
   const orderedBoothMapPayload = await orderedBoothMapResponse.json();
-  assert.equal(orderedBoothMapResponse.status, 400);
-  assert.match(orderedBoothMapPayload.error, /已有正常订单/);
+  assert.equal(orderedBoothMapResponse.status, 200);
+  assert.equal(orderedBoothMapPayload.success, true);
+  assert.equal(orderedBoothMapPayload.synced_order_count, 1);
+  const orderedBoothMapStatements = orderedBoothMapEnv.captured.batchCalls.flat();
+  const orderSyncCall = orderedBoothMapStatements.find((call) => call.sql.includes('UPDATE Orders') && call.sql.includes('booth_id = ?'));
+  assert.ok(orderSyncCall);
+  assert.deepEqual(orderSyncCall.params, ['1A02', 12, '个', 501, 7]);
+  assert.equal(orderedBoothMapStatements.some((call) => call.sql.includes('total_booth_fee')), false);
+  assert.ok(orderedBoothMapStatements.some((call) => call.sql.includes('UPDATE ExhibitionLintels')));
 
   const orderedBoothEditRequest = new Request('http://localhost/api/edit-booth', {
     method: 'POST',

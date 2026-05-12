@@ -1,4 +1,5 @@
 import { errorResponse } from './response.mjs';
+import { isDefaultPasswordHash } from './crypto.mjs';
 
 export function normalizeUserRole(role) {
     const normalized = String(role || '').trim().toLowerCase();
@@ -40,11 +41,18 @@ async function getOrderSalesOwner(env, orderId) {
 }
 
 export async function getStaffAuthState(env, staffName) {
-    return env.DB.prepare(`
-      SELECT name, role, COALESCE(token_index, 0) AS token_index
+    const row = await env.DB.prepare(`
+      SELECT name, role, password, COALESCE(token_index, 0) AS token_index
       FROM Staff
       WHERE name = ?
     `).bind(String(staffName || '').trim()).first();
+    if (!row) return null;
+    return {
+        name: row.name,
+        role: row.role,
+        token_index: Number(row.token_index || 0),
+        must_change_password: await isDefaultPasswordHash(row.password)
+    };
 }
 
 export function isSuperAdmin(user) {

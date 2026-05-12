@@ -86,13 +86,15 @@ npm run backup:sqlite     # 在 Node/SQLite 服务器上备份数据库和文件
 npm run deploy            # Worker + VPS 静态资源一起发布
 ```
 
-`scripts/deploy-vps-static.sh` 和 `scripts/deploy-vps-server.sh` 支持在本地 `.deploy.vps.env` 里配置多台发布目标。新机器可先复制 `.deploy.vps.env.example`：
+`scripts/deploy-vps-static.sh` 和 `scripts/deploy-vps-server.sh` 支持在仓库外配置多台发布目标。默认优先读取 `~/.config/fuzhou-fishery-expo/deploy.vps.env`，也可用 `DEPLOY_VPS_CONFIG_FILE=/path/to/env` 显式指定；仅在仓库外配置不存在时才回退读取本地 `.deploy.vps.env`。新机器可先复制示例到仓库外：
 
 ```bash
-cp .deploy.vps.env.example .deploy.vps.env
+mkdir -p ~/.config/fuzhou-fishery-expo
+cp .deploy.vps.env.example ~/.config/fuzhou-fishery-expo/deploy.vps.env
+chmod 600 ~/.config/fuzhou-fishery-expo/deploy.vps.env
 
 VPS_DEPLOY_TARGETS="aliyun"
-VPS_TARGET_ALIYUN_HOST=8.136.49.187
+VPS_TARGET_ALIYUN_HOST=203.0.113.10
 VPS_TARGET_ALIYUN_PORT=22
 VPS_TARGET_ALIYUN_USER=admin
 VPS_TARGET_ALIYUN_SSH_KEY=~/.ssh/id_ed25519_expo_vps
@@ -104,7 +106,7 @@ VPS_TARGET_ALIYUN_REMOTE_ENV_FILE=/opt/expo-server/.env.production
 VPS_TARGET_ALIYUN_PM2_APP_NAME=expo-server
 ```
 
-静态脚本会逐台检查和同步；远端没有 `rsync` 时会自动改用 tar 流同步。服务端脚本会同步 Node 文件、运行 `npm ci --omit=dev`，并通过 PM2 启动或重载 `expo-server`。
+静态脚本会逐台检查和同步，并拒绝同步到 `/var/www/` 之外的远端路径；远端没有 `rsync` 时会自动改用 tar 流同步。服务端脚本会先校验远端 SQLite 路径处于受保护目录并执行部署前备份，再同步 Node 文件、运行 `npm ci --omit=dev`，并通过 PM2 启动或重载 `expo-server`。
 
 ## 部署与配置
 

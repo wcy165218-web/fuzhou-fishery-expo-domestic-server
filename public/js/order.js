@@ -877,13 +877,16 @@ window.initOrderForm = async function() {
 window.loadOrderFormDependencies = async function(options = {}) {
     const pid = options.projectId || document.getElementById('global-project-select')?.value;
     if (!pid) return;
-    await Promise.all([
+    const dependencyLoaders = [
         window.loadPrices({ projectId: pid, force: options.force === true }),
         window.loadBooths({ projectId: pid, force: options.force === true }),
         window.loadOrderFieldSettings?.({ projectId: pid, retryCount: 2, force: options.force === true }),
-        window.loadIndustries({ projectId: pid, retryCount: 2, force: options.force === true }),
-        window.getProjectStaffList?.(pid, { force: options.force === true })
-    ]);
+        window.loadIndustries({ projectId: pid, retryCount: 2, force: options.force === true })
+    ];
+    if (window.isSuperAdmin?.()) {
+        dependencyLoaders.push(window.getProjectStaffList?.(pid, { force: options.force === true }));
+    }
+    await Promise.all(dependencyLoaders);
 }
 
 window.resetOrderForm = function() {

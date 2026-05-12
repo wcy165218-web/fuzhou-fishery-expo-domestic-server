@@ -106,15 +106,37 @@ upstream expo_node_api {
     keepalive 32;
 }
 
+server_tokens off;
+limit_req_zone \$binary_remote_addr zone=expo_login_rate:10m rate=10r/m;
+limit_req_zone \$binary_remote_addr zone=expo_public_rate:10m rate=30r/m;
+limit_req_status 429;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+
 server {
     listen 80;
     listen [::]:80;
-    server_name ${PUBLIC_HOST} ${VPS_PUBLIC_IP} _;
+    server_name ${PUBLIC_HOST};
 
     root ${STATIC_ROOT};
     index index.html;
     client_max_body_size 20m;
     include /etc/nginx/snippets/expo-static-security.conf;
+
+    location = /api/login {
+        limit_req zone=expo_login_rate burst=10 nodelay;
+        include /etc/nginx/snippets/expo-node-proxy.conf;
+    }
+
+    location ^~ /api/public/exhibitor-confirmations/ {
+        limit_req zone=expo_public_rate burst=20 nodelay;
+        include /etc/nginx/snippets/expo-node-proxy.conf;
+    }
 
     location ^~ /api/ {
         include /etc/nginx/snippets/expo-node-proxy.conf;

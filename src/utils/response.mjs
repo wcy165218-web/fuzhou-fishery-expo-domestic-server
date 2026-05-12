@@ -118,14 +118,17 @@ export function withResponseHeaders(response, extraHeaders = {}) {
 
 export function buildCorsHeaders(request, url, env) {
     const requestOrigin = request.headers.get('Origin');
+    const isProduction = String(env.NODE_ENV || '').trim().toLowerCase() === 'production';
     const configuredOrigins = String(env.ALLOWED_ORIGINS || '')
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
-    const allowedOrigins = Array.from(new Set([url.origin, ...configuredOrigins]));
+    const allowedOrigins = configuredOrigins.length > 0
+        ? Array.from(new Set(configuredOrigins))
+        : (isProduction ? [] : [url.origin]);
     const allowOrigin = requestOrigin
         ? (allowedOrigins.includes(requestOrigin) ? requestOrigin : '')
-        : (allowedOrigins[0] || url.origin);
+        : (allowedOrigins[0] || '');
 
     const headers = {
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',

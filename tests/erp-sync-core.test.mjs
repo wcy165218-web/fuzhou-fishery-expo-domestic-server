@@ -4,6 +4,7 @@ import {
   buildErpRequestUrlWithSearch,
   buildErpRequestParams,
   buildErpRequestParamsWithSearch,
+  buildErpRefundRequestConfig,
   buildProjectSearchKeywords,
   extractErpRows,
   buildErpSyncPlan
@@ -23,18 +24,50 @@ function runTests() {
     endpoint_url: 'https://erp.example.com/hyExhibitionConfirmdealController.do?isDealdatagrid',
     water_id: 'EXPO123'
   });
-  assert.equal(
-    exhibitionUrl,
-    'https://erp.example.com/hyExhibitionConfirmdealController.do?isDealdatagrid=&exhibitionId=EXPO123'
-  );
+  const parsedExhibitionUrl = new URL(exhibitionUrl);
+  assert.equal(parsedExhibitionUrl.searchParams.has('isDealdatagrid'), true);
+  assert.equal(parsedExhibitionUrl.searchParams.get('exhibitionId'), 'EXPO123');
+  assert.equal(parsedExhibitionUrl.searchParams.get('field'), 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,');
 
   const exhibitionUrlWithPlaceholder = buildErpRequestUrl({
     endpoint_url: 'https://erp.example.com/hyExhibitionConfirmdealController.do?isDealdatagrid&exhibitionId=(exhibitionId)',
     water_id: 'EXPO123'
   });
-  assert.equal(
-    exhibitionUrlWithPlaceholder,
-    'https://erp.example.com/hyExhibitionConfirmdealController.do?isDealdatagrid=&exhibitionId=EXPO123'
+  const parsedExhibitionUrlWithPlaceholder = new URL(exhibitionUrlWithPlaceholder);
+  assert.equal(parsedExhibitionUrlWithPlaceholder.searchParams.has('isDealdatagrid'), true);
+  assert.equal(parsedExhibitionUrlWithPlaceholder.searchParams.get('exhibitionId'), 'EXPO123');
+  assert.equal(parsedExhibitionUrlWithPlaceholder.searchParams.get('field'), 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,');
+
+  const exhibitionUrlWithoutGridParam = buildErpRequestUrl({
+    endpoint_url: 'https://erp.example.com/hyExhibitionConfirmdealController.do?',
+    water_id: 'EXPO123'
+  });
+  const parsedExhibitionUrlWithoutGridParam = new URL(exhibitionUrlWithoutGridParam);
+  assert.equal(parsedExhibitionUrlWithoutGridParam.searchParams.has('isDealdatagrid'), true);
+  assert.equal(parsedExhibitionUrlWithoutGridParam.searchParams.get('exhibitionId'), 'EXPO123');
+  assert.equal(parsedExhibitionUrlWithoutGridParam.searchParams.get('field'), 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,');
+
+  const derivedRefundConfig = buildErpRefundRequestConfig({
+    endpoint_url: 'https://erp.example.com/hyDailyWaterController.do?datagrid&field=id,company',
+    water_id: 'EXPO123',
+    expected_project_name: '2026年06月中国'
+  });
+  const parsedDerivedRefundConfigUrl = new URL(derivedRefundConfig.endpoint_url);
+  assert.equal(parsedDerivedRefundConfigUrl.pathname, '/hyExhibitionConfirmdealController.do');
+  assert.equal(parsedDerivedRefundConfigUrl.searchParams.has('isDealdatagrid'), true);
+  assert.equal(parsedDerivedRefundConfigUrl.searchParams.get('field'), 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,');
+  const parsedDerivedRefundUrl = new URL(buildErpRequestUrl(derivedRefundConfig));
+  assert.equal(parsedDerivedRefundUrl.pathname, '/hyExhibitionConfirmdealController.do');
+  assert.equal(parsedDerivedRefundUrl.searchParams.has('isDealdatagrid'), true);
+  assert.equal(parsedDerivedRefundUrl.searchParams.get('exhibitionId'), 'EXPO123');
+  assert.equal(parsedDerivedRefundUrl.searchParams.get('field'), 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,');
+  assert.deepEqual(
+    buildErpRequestParams(derivedRefundConfig, 1, 100),
+    {
+      page: '1',
+      rows: '100',
+      exhibitionId: 'EXPO123'
+    }
   );
 
   const dailyWaterUrl = buildErpRequestUrl({
@@ -144,9 +177,10 @@ function runTests() {
       { id: 'erp-6', state: 'closed', confirmMoney: '9000', extensionName: '福州渔博会 2026', accountCompany: '会超额的企业' },
       { id: 'erp-7', state: 'closed', confirmMoney: '1000', extensionName: '福州渔博会 2026', accountCompany: '同名企业' },
       { id: 'erp-8', state: 'closed', confirmMoney: '36000', accountCompany: '项目ID不一致企业', exhibitionId: 'OTHER' },
-      { id: 'erp-9', state: 'closed', confirmMoney: '6800', accountCompany: '退款企业', exhibitionId: 'EXPO123', refundMoney: '10' },
+      { id: 'erp-9', state: 'closed', waterMoney: '100140.00', company: '福建省祥斌生物科技有限公司', exhibitionId: 'EXPO123', refundMoney: '63600.00', costTotal: '63600.00', costDeal: '63600.00', costActual: '36540.00', unTicketMoney: '36540.00', residue: '27060.00', __erpSyncKind: 'refund' },
       { id: 'erp-10', state: 'closed', confirmMoney: '6800', accountCompany: '中渔（福建）渔业有限公司', exhibitionId: 'EXPO123' },
-      { id: 'erp-11', state: 'closed', confirmMoney: '1200', extensionName: '福州渔博会旧名称', accountCompany: '旧项目名企业', exhibitionId: 'EXPO123' }
+      { id: 'erp-11', state: 'closed', confirmMoney: '1200', extensionName: '福州渔博会旧名称', accountCompany: '旧项目名企业', exhibitionId: 'EXPO123' },
+      { id: 'erp-12', state: 'closed', waterMoney: '36540.00', company: '无退款认领企业', exhibitionId: 'EXPO123', refundMoney: '0.00', __erpSyncKind: 'refund' }
     ],
     orders: [
       { id: 11, project_id: 1, company_name: '福建海洋科技', total_amount: 6000, paid_amount: 0 },
@@ -155,18 +189,21 @@ function runTests() {
       { id: 14, project_id: 1, company_name: '同名企业', total_amount: 5000, paid_amount: 0 },
       { id: 15, project_id: 1, company_name: '同名企业', total_amount: 5000, paid_amount: 0 },
       { id: 16, project_id: 1, company_name: '项目ID不一致企业', total_amount: 50000, paid_amount: 0 },
-      { id: 17, project_id: 1, company_name: '退款企业', total_amount: 50000, paid_amount: 0 },
+      { id: 17, project_id: 1, company_name: '福建省祥斌生物科技有限公司', total_amount: 50000, paid_amount: 0 },
       { id: 18, project_id: 1, company_name: '中渔（福建）渔业有限公司', total_amount: 50000, paid_amount: 0 },
-      { id: 19, project_id: 1, company_name: '旧项目名企业', total_amount: 50000, paid_amount: 0 }
+      { id: 19, project_id: 1, company_name: '旧项目名企业', total_amount: 50000, paid_amount: 0 },
+      { id: 20, project_id: 1, company_name: '无退款认领企业', total_amount: 50000, paid_amount: 0 }
     ],
     existingErpIds: ['erp-5'],
     expectedProjectName: '福州渔博会 2026',
     expectedProjectId: 'EXPO123'
   });
 
-  assert.equal(plan.summary.total_rows, 11);
-  assert.equal(plan.summary.importable_count, 4);
-  assert.equal(plan.summary.matched_count, 4);
+  assert.equal(plan.summary.total_rows, 12);
+  assert.equal(plan.summary.importable_count, 5);
+  assert.equal(plan.summary.payment_importable_count, 4);
+  assert.equal(plan.summary.refund_importable_count, 1);
+  assert.equal(plan.summary.matched_count, 5);
   assert.equal(plan.summary.skipped_not_closed, 1);
   assert.equal(plan.summary.skipped_project_mismatch, 2);
   assert.equal(plan.summary.unmatched_company, 1);
@@ -176,6 +213,7 @@ function runTests() {
   assert.equal(plan.summary.ambiguous_company, 1);
   assert.equal(plan.summary.skipped_refund_related, 1);
   assert.equal(plan.importableItems.length, 4);
+  assert.equal(plan.refundItems.length, 1);
   assert.equal(plan.importableItems[0].order_id, 11);
   assert.equal(plan.importableItems[0].erp_record_id, 'erp-1');
   assert.equal(plan.importableItems[0].payer_name, '张三');
@@ -190,6 +228,11 @@ function runTests() {
   assert.equal(plan.importableItems[2].erp_record_id, 'erp-10');
   assert.equal(plan.importableItems[3].order_id, 19);
   assert.equal(plan.importableItems[3].erp_record_id, 'erp-11');
+  assert.equal(plan.refundItems[0].order_id, 17);
+  assert.equal(plan.refundItems[0].amount, 63600);
+  assert.equal(plan.refundItems[0].erp_record_id, 'erp-9');
+  assert.equal(plan.refundItems[0].source, 'ERP_SYNC_REFUND');
+  assert.match(plan.refundItems[0].reason, /ERP退款金额：63600\.00/);
 }
 
 runTests();

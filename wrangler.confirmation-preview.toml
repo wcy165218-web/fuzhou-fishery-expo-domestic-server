@@ -18,9 +18,6 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/*"]
 
-[vars]
-CF_ACCOUNT_ID = "bb5582c4aed9457c0c431e8114588ccc"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "exhibition_db_confirmation_preview"

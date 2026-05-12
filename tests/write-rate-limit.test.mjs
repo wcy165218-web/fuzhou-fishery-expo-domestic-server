@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import worker from '../_worker.js';
-import { buildJwtPayloadForUser, signJWT } from '../src/utils/crypto.mjs';
+import { buildJwtPayloadForUser, hashPassword, signJWT } from '../src/utils/crypto.mjs';
 
 function createMockEnv(options = {}) {
     const rateLimitStore = new Map();
@@ -30,10 +30,12 @@ function createMockEnv(options = {}) {
                     },
                     async first() {
                         if (normalizedSql.includes('FROM Staff')) {
+                            const staffName = String(this.params[0] || '');
                             return {
-                                name: String(this.params[0] || ''),
+                                name: staffName,
                                 role: 'admin',
-                                token_index: 0
+                                token_index: 0,
+                                password: options.staffPasswords?.[staffName] || ''
                             };
                         }
                         if (normalizedSql.includes('FROM WriteRateLimits')) {
@@ -93,10 +95,11 @@ async function createAuthHeaders(name = 'admin') {
     };
 }
 
-async function callWorker(env, method, path, headers = {}) {
+async function callWorker(env, method, path, headers = {}, body = null) {
     return worker.fetch(new Request(`http://localhost${path}`, {
         method,
-        headers
+        headers,
+        body
     }), env, { waitUntil() {} });
 }
 
@@ -157,6 +160,31 @@ async function callWorker(env, method, path, headers = {}) {
     });
     assert.equal(response.status, 200);
     assert.equal(env.assetRequests[0]?.pathname, '/exhibitor-confirm');
+}
+
+// Test 7: accounts still using the default password are forced into password change.
+{
+    const defaultPasswordHash = await hashPassword('123456');
+    const env = createMockEnv({
+        staffPasswords: {
+            'default-user': defaultPasswordHash
+        }
+    });
+    const headers = await createAuthHeaders('default-user');
+    const blocked = await callWorker(env, 'GET', '/api/non-existent', headers);
+    const blockedPayload = await blocked.json();
+    assert.equal(blocked.status, 403);
+    assert.equal(blockedPayload.error, '当前账号仍在使用默认密码，请先修改密码');
+
+    const changed = await callWorker(
+        env,
+        'POST',
+        '/api/change-password',
+        { ...headers, 'Content-Type': 'application/json' },
+        JSON.stringify({ oldPass: '123456', newPass: 'safe-pass-2026' })
+    );
+    assert.equal(changed.status, 200);
+    assert.equal((await changed.json()).success, true);
 }
 
 console.log('Write rate limit tests passed');

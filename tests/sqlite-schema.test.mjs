@@ -89,6 +89,7 @@ const expectedIndexes = [
   'idx_exhibitor_confirmation_events_order',
   'idx_exhibitor_confirmation_links_order',
   'idx_exhibitor_confirmation_links_token',
+  'idx_expenses_erp_record_id',
   'idx_expenses_order_deleted_created_at',
   'idx_expenses_project_deleted_order',
   'idx_expenses_project_type_deleted',
@@ -139,6 +140,12 @@ const expectedIndexes = [
     );
     db.database.prepare('INSERT INTO Payments (project_id, order_id, amount, payment_time) VALUES (1, 3, 30, ?)').run('2026-05-10 10:02:00');
     db.database.prepare('INSERT INTO Payments (project_id, order_id, amount, payment_time) VALUES (1, 4, 40, ?)').run('2026-05-10 10:03:00');
+
+    db.database.prepare("INSERT INTO Expenses (project_id, order_id, expense_type, payee_name, amount, reason, erp_record_id) VALUES (1, 1, '退款', '测试企业', 10, 'ERP退款', ?)").run('erp-refund-1');
+    assert.throws(
+      () => db.database.prepare("INSERT INTO Expenses (project_id, order_id, expense_type, payee_name, amount, reason, erp_record_id) VALUES (1, 2, '退款', '测试企业', 20, 'ERP退款', ?)").run('erp-refund-1'),
+      /UNIQUE constraint failed/
+    );
 
     db.database.prepare("INSERT INTO Booths (id, project_id, hall, type) VALUES ('A01', 1, '1号馆', '标摊')").run();
     assert.throws(

@@ -1,6 +1,7 @@
 import {
     buildErpRequestParams,
     buildErpRequestParamsWithSearch,
+    buildErpRefundRequestConfig,
     buildErpRequestUrl,
     buildErpRequestUrlWithSearch,
     buildErpSyncPlan,
@@ -70,7 +71,10 @@ export async function getErpConfig(env, projectId) {
 }
 
 export async function saveErpConfig(env, payload) {
-    const encryptedSessionCookie = await encryptSensitiveValue(String(payload.session_cookie || '').trim(), env);
+    const sessionCookie = String(payload.session_cookie || '').trim();
+    const encryptedSessionCookie = sessionCookie
+        ? await encryptSensitiveValue(sessionCookie, env)
+        : '';
 
     await env.DB.prepare(`
       INSERT INTO ProjectErpConfigs (
@@ -85,7 +89,10 @@ export async function saveErpConfig(env, payload) {
         enabled = excluded.enabled,
         endpoint_url = excluded.endpoint_url,
         water_id = excluded.water_id,
-        session_cookie = excluded.session_cookie,
+        session_cookie = CASE
+          WHEN excluded.session_cookie = '' THEN ProjectErpConfigs.session_cookie
+          ELSE excluded.session_cookie
+        END,
         expected_project_name = excluded.expected_project_name
     `).bind(
       Number(payload.project_id),
@@ -110,20 +117,16 @@ async function fetchErpPayload(config) {
         'Cookie': sessionCookie.includes('JSESSIONID=') ? sessionCookie : `JSESSIONID=${sessionCookie}`
     };
     const pageSize = 100;
-    const endpoint = String(config?.endpoint_url || '');
-    const searchKeywords = endpoint.includes('hyDailyWaterController.do')
-        ? buildProjectSearchKeywords(config?.expected_project_name).reverse()
-        : [''];
 
-    async function fetchPagedPayload(searchKeyword = '') {
-        const erpUrl = searchKeyword ? buildErpRequestUrlWithSearch(config, searchKeyword) : buildErpRequestUrl(config);
+    async function fetchPagedPayload(fetchConfig, searchKeyword = '', rowKind = '') {
+        const erpUrl = searchKeyword ? buildErpRequestUrlWithSearch(fetchConfig, searchKeyword) : buildErpRequestUrl(fetchConfig);
         const allRows = [];
         let total = 0;
 
         for (let page = 1; page <= 50; page += 1) {
             const params = searchKeyword
-                ? buildErpRequestParamsWithSearch(config, page, pageSize, searchKeyword)
-                : buildErpRequestParams(config, page, pageSize);
+                ? buildErpRequestParamsWithSearch(fetchConfig, page, pageSize, searchKeyword)
+                : buildErpRequestParams(fetchConfig, page, pageSize);
             const response = await fetch(erpUrl, {
                 method: 'POST',
                 headers,
@@ -138,7 +141,11 @@ async function fetchErpPayload(config) {
             const rows = extractErpRows(payload);
             const payloadTotal = Number(payload?.total || 0);
             if (payloadTotal > 0) total = payloadTotal;
-            allRows.push(...rows);
+            allRows.push(...rows.map((row) => (
+                rowKind && row && typeof row === 'object'
+                    ? { ...row, __erpSyncKind: rowKind }
+                    : row
+            )));
 
             if (rows.length === 0) {
                 break;
@@ -159,16 +166,43 @@ async function fetchErpPayload(config) {
         };
     }
 
-    let fallbackResult = { total: 0, rows: [] };
-    for (const keyword of searchKeywords) {
-        const result = await fetchPagedPayload(keyword);
-        if (result.total > 0 || result.rows.length > 0) {
-            return result;
+    async function fetchConfiguredEndpointPayload(fetchConfig, rowKind = '') {
+        const endpoint = String(fetchConfig?.endpoint_url || '');
+        const searchKeywords = endpoint.includes('hyDailyWaterController.do')
+            ? buildProjectSearchKeywords(fetchConfig?.expected_project_name).reverse()
+            : [''];
+
+        let fallbackResult = { total: 0, rows: [] };
+        for (const keyword of searchKeywords) {
+            const result = await fetchPagedPayload(fetchConfig, keyword, rowKind);
+            if (result.total > 0 || result.rows.length > 0) {
+                return result;
+            }
+            fallbackResult = result;
         }
-        fallbackResult = result;
+
+        return fallbackResult;
     }
 
-    return fallbackResult;
+    const primaryEndpoint = String(config?.endpoint_url || '');
+    const primaryKind = primaryEndpoint.includes('hyExhibitionConfirmdealController.do') ? 'refund' : 'payment';
+    const primaryResult = await fetchConfiguredEndpointPayload(config, primaryKind);
+    const refundConfig = buildErpRefundRequestConfig(config);
+    const shouldFetchRefundEndpoint = refundConfig
+        && String(refundConfig.endpoint_url || '') !== primaryEndpoint
+        && primaryKind !== 'refund';
+    if (!shouldFetchRefundEndpoint) {
+        return primaryResult;
+    }
+
+    const refundResult = await fetchConfiguredEndpointPayload(refundConfig, 'refund');
+    return {
+        total: Number(primaryResult.total || 0) + Number(refundResult.total || 0),
+        rows: [
+            ...(primaryResult.rows || []),
+            ...(refundResult.rows || [])
+        ]
+    };
 }
 
 export async function buildErpPreviewResult(env, projectId, config) {
@@ -189,11 +223,27 @@ export async function buildErpPreviewResult(env, projectId, config) {
           AND p.deleted_at IS NULL
           AND o.status = '正常'
     `).bind(projectId).all()).results || [];
+    const existingRefundRows = (await env.DB.prepare(`
+        SELECT p.erp_record_id
+        FROM Payments p
+        INNER JOIN Orders o ON o.id = p.order_id
+        WHERE p.project_id = ?
+          AND p.source = 'ERP_SYNC_REFUND'
+          AND p.erp_record_id IS NOT NULL
+          AND p.erp_record_id != ''
+          AND p.deleted_at IS NULL
+          AND o.status = '正常'
+    `).bind(projectId).all()).results || [];
 
     return buildErpSyncPlan({
         rows,
         orders: orderRows,
-        existingErpIds: existingRows.map((row) => row.erp_record_id),
+        existingErpIds: [
+            ...existingRows.map((row) => row.erp_record_id)
+        ],
+        existingRefundErpIds: [
+            ...existingRefundRows.map((row) => row.erp_record_id)
+        ],
         expectedProjectName: config.expected_project_name || '',
         expectedProjectId: config.water_id || ''
     });

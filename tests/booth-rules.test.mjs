@@ -10,6 +10,7 @@ import {
   resolveOrderPaymentStage
 } from '../src/utils/helpers.mjs';
 import { deriveBoothRuntimeStatus } from '../src/services/booth-map-view.mjs';
+import { replaceOrderBoothCodes } from '../src/routes/booth-maps.mjs';
 
 
 function runTests() {
@@ -31,6 +32,11 @@ function runTests() {
   assert.equal(resolveHallFromMapName('2026福州渔博会 8号馆 终版'), '8号馆');
   assert.equal(resolveHallFromMapName('国际展区地图'), '国际展区地图');
   assert.equal(resolveHallFromMapName(''), '');
+
+  assert.equal(
+    replaceOrderBoothCodes('1A01, 1A02 / 1A03', new Map([['1A02', '1B02']])),
+    '1A01, 1B02, 1A03'
+  );
 
   assert.deepEqual(
     deriveBoothRuntimeStatus('已锁定', []),

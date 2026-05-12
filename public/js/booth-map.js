@@ -2537,11 +2537,6 @@ window.onBoothMapPointerDown = function(event) {
         window.setSelectedBoothMapItems([itemId]);
         const selectedItem = window.getSelectedBoothMapItem();
         if (!selectedItem) return;
-        if (window.isBoothMapItemOrderLocked(selectedItem)) {
-            window.showToast('该展位已有正常订单，仅允许移动位置和修改展位类型，不能调整面积或规格', 'error');
-            window.renderCurrentBoothMap();
-            return;
-        }
         state.pointerMode = 'resize';
         state.pointerStartPoint = point;
         state.resizeContext = {
@@ -2825,10 +2820,6 @@ window.populateBoothMapPropertyPanel = function() {
             : 'btn-secondary w-full px-3 py-2.5 text-sm justify-center';
     }
     ['bm-field-code', 'bm-field-type', 'bm-field-opening', 'bm-field-width', 'bm-field-height'].forEach((id) => setDisabled(id, !canEditSingle));
-    if (orderLocked) {
-        ['bm-field-code', 'bm-field-opening', 'bm-field-width', 'bm-field-height'].forEach((id) => setDisabled(id, true));
-        setDisabled('bm-field-type', false);
-    }
 
     if (!item) {
         if (titleEl) titleEl.innerText = selectionCount > 1 ? `已选择 ${selectionCount} 个展位` : '未选择展位';
@@ -2846,7 +2837,7 @@ window.populateBoothMapPropertyPanel = function() {
     if (titleEl) titleEl.innerText = item.booth_code || '未命名展位';
     if (metaEl) {
         metaEl.innerText = orderLocked
-            ? '该展位已有正常订单，仅允许修改展位类型和拖动位置；面积、规格、展位号和删除已锁定。'
+            ? '该展位已有正常订单；可修改展位号、类型、尺寸和位置，保存后订单展位信息同步更新，但不能直接删除。'
             : (summary.blockedItems.find((entry) => String(entry.item.id) === String(item.id))?.error
                 || '可直接拖动当前展位移动位置，也可拖边线调整大小。');
     }
@@ -2893,11 +2884,6 @@ window.updateSelectedBoothMapField = function(field, value) {
     if (selectedItems.length !== 1) return;
     const item = selectedItems[0];
     if (!item) return;
-    if (window.isBoothMapItemOrderLocked(item) && field !== 'booth_type') {
-        window.showToast('该展位已有正常订单，仅允许修改展位类型，不能修改展位号、面积或规格', 'error');
-        window.populateBoothMapPropertyPanel();
-        return;
-    }
     if (field === 'booth_code') {
         const nextBoothCode = String(value || '').trim().toUpperCase();
         const duplicateItem = window.findDuplicateBoothMapItemByCode(nextBoothCode, item.id);
@@ -3513,7 +3499,7 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
                 stroke-linejoin="round"
             ></polygon>
         `;
-    const handleMarkup = mode === 'editor' && selected && window.getBoothMapSelectionCount() === 1 && !window.isBoothMapItemOrderLocked(item)
+    const handleMarkup = mode === 'editor' && selected && window.getBoothMapSelectionCount() === 1
         ? window.renderBoothMapResizeHandles(widthPx, heightPx)
         : '';
     const boothCodeAttr = mode === 'preview' ? ` data-booth-code="${window.escapeBoothMapText(window.normalizeBoothCode(item.booth_code))}"` : '';
@@ -3793,6 +3779,9 @@ window.saveBoothMapQuick = async function() {
                 window.clearBoothMapRemovedPersistedCodes();
             }
             boothMapDirty = (currentBoothMapItems || []).some((item) => item._dirty) || summary.blockedItems.length > 0;
+            if (Number(itemData.synced_order_count || 0) > 0) {
+                await window.refreshBoothMapRuntime({ silent: true, force: true });
+            }
             window.renderCurrentBoothMap();
             if (summary.blockedItems.length > 0) {
                 window.showToast(`已保存 ${summary.savableItems.length} 个展位，另有 ${summary.blockedItems.length} 个待完善`, 'info');
@@ -3827,6 +3816,9 @@ window.saveSelectedBoothMapItem = async function() {
             item._persistedBoothCode = window.normalizeBoothCode(item.booth_code);
             currentBoothMap.updated_at = itemData.updated_at || currentBoothMap.updated_at;
             boothMapDirty = (currentBoothMapItems || []).some((candidate) => candidate._dirty);
+            if (Number(itemData.synced_order_count || 0) > 0) {
+                await window.refreshBoothMapRuntime({ silent: true, force: true });
+            }
             window.renderCurrentBoothMap();
             window.showToast(`展位 ${item.booth_code} 已保存`);
         });

@@ -66,9 +66,10 @@ export async function handleExpenseRoutes({
             const payload = await readJsonBody(request, corsHeaders);
             if (payload instanceof Response) return payload;
             const { expense_id } = payload;
-            const expense = await env.DB.prepare('SELECT id, order_id, project_id, expense_type, payee_name, amount FROM Expenses WHERE id = ? AND deleted_at IS NULL')
+            const expense = await env.DB.prepare('SELECT id, order_id, project_id, expense_type, payee_name, amount, source FROM Expenses WHERE id = ? AND deleted_at IS NULL')
                 .bind(Number(expense_id)).first();
             if (!expense) return errorResponse('记录不存在或已撤销', 404, corsHeaders);
+            if (String(expense.source || '') === 'ERP_SYNC_REFUND') return errorResponse('ERP 同步退款不允许手动撤销', 400, corsHeaders);
             const hasPermission = await canManageOrder(env, currentUser, expense.order_id);
             if (!hasPermission) return errorResponse('权限不足：仅管理员或本人名下企业可撤销', 403, corsHeaders);
             await env.DB.prepare('UPDATE Expenses SET deleted_at = ?, deleted_by = ? WHERE id = ? AND deleted_at IS NULL')

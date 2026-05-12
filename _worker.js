@@ -111,6 +111,11 @@ function setCachedStaffAuth(name, data) {
     staffAuthCache.set(key, { data, ts: Date.now() });
 }
 
+function clearCachedStaffAuth(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (key) staffAuthCache.delete(key);
+}
+
 export default {
   async scheduled(event, env, ctx = {}) {
     const releaseTask = expireOverdueReservedOrders(env).catch((error) => {
@@ -191,8 +196,12 @@ export default {
 	          ...currentUser,
 	          name: currentStaffState.name,
 	          role: normalizeUserRole(currentStaffState.role),
-	          token_index: Number(currentStaffState.token_index || 0)
+	          token_index: Number(currentStaffState.token_index || 0),
+	          must_change_password: !!currentStaffState.must_change_password
 	        };
+	        if (currentUser.must_change_password && url.pathname !== '/api/change-password') {
+	          return errorResponse('当前账号仍在使用默认密码，请先修改密码', 403, corsHeaders);
+	        }
 	        if (isSuperAdmin(currentUser) && !legacyErpSecretMigrationScheduled) {
 	          legacyErpSecretMigrationScheduled = true;
 	          ctx.waitUntil(
@@ -211,6 +220,10 @@ export default {
 	      if (request.method === 'POST' && currentUser) {
 	        const limited = await checkWriteRateLimit(env, currentUser.name);
 	        if (limited) return errorResponse('操作过于频繁，请稍后再试', 429, corsHeaders);
+	      }
+
+	      if (url.pathname === '/api/change-password' && currentUser?.name) {
+	        clearCachedStaffAuth(currentUser.name);
 	      }
 
 	      const routeResponse = await dispatchApiRoutes({

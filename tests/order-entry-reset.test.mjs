@@ -220,6 +220,11 @@ function createOrderHarness() {
       return String(value ?? '');
     },
     toggleBtnLoading() {},
+    isSuperAdmin(user = window.currentUser) {
+      if (!user) return false;
+      const role = String(user.role || '').trim().toLowerCase();
+      return role === 'super_admin' || (role === 'admin' && user.name === 'admin');
+    },
     isOrderFieldEnabled(fieldKey) {
       return fieldKey !== 'extra_fees';
     },
@@ -424,8 +429,36 @@ async function testInitOrderFormStillResetsAfterDependenciesLoad() {
   assert.equal(calls.at(-1), 'overview');
 }
 
+async function testSalesOrderFormDoesNotLoadStaffList() {
+  const { window } = createOrderHarness();
+  const calls = [];
+
+  window.currentUser = { role: 'user', name: '业务员甲' };
+  window.loadPrices = async () => {
+    calls.push('prices');
+  };
+  window.loadBooths = async () => {
+    calls.push('booths');
+  };
+  window.loadOrderFieldSettings = async () => {
+    calls.push('fields');
+  };
+  window.loadIndustries = async () => {
+    calls.push('industries');
+  };
+  window.getProjectStaffList = async () => {
+    calls.push('staff');
+    throw new Error('仅管理员可操作');
+  };
+
+  await window.loadOrderFormDependencies({ projectId: '1', force: true });
+
+  assert.deepEqual(calls.sort(), ['booths', 'fields', 'industries', 'prices']);
+}
+
 await testSubmitOrderClearsFormImmediately();
 await testBackgroundRefreshFailureShowsToastWithoutBlockingSuccess();
 await testInitOrderFormStillResetsAfterDependenciesLoad();
+await testSalesOrderFormDoesNotLoadStaffList();
 
 console.log('Order entry reset tests passed');

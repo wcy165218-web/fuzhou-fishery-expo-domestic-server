@@ -7,13 +7,21 @@ import { readFileSync } from 'fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = join(__dirname, '.dev.vars');
 let CF_API_TOKEN = '';
-let CF_ACCOUNT_ID = 'bb5582c4aed9457c0c431e8114588ccc'; // from wrangler.toml
+let CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || '';
 
 try {
   const envFile = readFileSync(envPath, 'utf-8');
   const match = envFile.match(/CF_API_TOKEN=["']?([^"'\n]+)["']?/);
   if (match) CF_API_TOKEN = match[1];
 } catch(e) {}
+
+if (!CF_ACCOUNT_ID) {
+  try {
+    const envFile = readFileSync(envPath, 'utf-8');
+    const match = envFile.match(/(?:CF_ACCOUNT_ID|CLOUDFLARE_ACCOUNT_ID)=["']?([^"'\n]+)["']?/);
+    if (match) CF_ACCOUNT_ID = match[1];
+  } catch(e) {}
+}
 
 // If .dev.vars doesn't have it, try to read from wrangler config or assume user needs to provide it.
 // Actually, I can just read it from the user's .dev.vars or environment.

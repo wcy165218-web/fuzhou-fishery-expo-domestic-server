@@ -4,7 +4,15 @@ set -euo pipefail
 
 SCRIPT_DIR=${0:A:h}
 PROJECT_ROOT=${SCRIPT_DIR:h}
-CONFIG_FILE=${DEPLOY_VPS_CONFIG_FILE:-$PROJECT_ROOT/.deploy.vps.env}
+LOCAL_CONFIG_FILE="$PROJECT_ROOT/.deploy.vps.env"
+DEFAULT_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/fuzhou-fishery-expo/deploy.vps.env"
+if [[ -n "${DEPLOY_VPS_CONFIG_FILE:-}" ]]; then
+  CONFIG_FILE="$DEPLOY_VPS_CONFIG_FILE"
+elif [[ -f "$DEFAULT_CONFIG_FILE" ]]; then
+  CONFIG_FILE="$DEFAULT_CONFIG_FILE"
+else
+  CONFIG_FILE="$LOCAL_CONFIG_FILE"
+fi
 DEPLOY_ACTION=${1:-deploy}
 
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -26,6 +34,7 @@ VPS_PM2_APP_NAME=${VPS_PM2_APP_NAME:-expo-server}
 VPS_REMOTE_ENV_FILE=${VPS_REMOTE_ENV_FILE:-$VPS_SERVER_PATH/.env.production}
 VPS_INSTALL_PM2=${VPS_INSTALL_PM2:-1}
 VPS_PM2_SAVE=${VPS_PM2_SAVE:-1}
+VPS_PREDEPLOY_BACKUP=${VPS_PREDEPLOY_BACKUP:-1}
 
 if ! command -v ssh >/dev/null 2>&1; then
   echo "ssh is required for VPS server deployment" >&2
@@ -184,6 +193,69 @@ fi
 REMOTE
 }
 
+remote_predeploy_guard_command() {
+  local server_path=$(remote_quote "$REMOTE_SERVER_PATH")
+  local env_file=$(remote_quote "$REMOTE_ENV_FILE")
+  local predeploy_backup=$(remote_quote "$VPS_PREDEPLOY_BACKUP")
+
+  cat <<REMOTE
+set -euo pipefail
+server_path=${server_path}
+env_file=${env_file}
+predeploy_backup=${predeploy_backup}
+
+if [[ -f "\$env_file" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "\$env_file"
+  set +a
+fi
+
+sqlite_db_path="\${SQLITE_DB_PATH:-\${DB_PATH:-\$server_path/data/exhibition.sqlite}}"
+case "\$sqlite_db_path" in
+  /*) absolute_db_path="\$sqlite_db_path" ;;
+  *) absolute_db_path="\$server_path/\$sqlite_db_path" ;;
+esac
+
+if command -v realpath >/dev/null 2>&1; then
+  resolved_server_path="\$(realpath -m "\$server_path")"
+  resolved_db_path="\$(realpath -m "\$absolute_db_path")"
+else
+  resolved_server_path="\$(cd "\$server_path" && pwd -P)"
+  db_dir="\$(dirname "\$absolute_db_path")"
+  resolved_db_path="\$(cd "\$db_dir" 2>/dev/null && pwd -P)/\$(basename "\$absolute_db_path")"
+fi
+
+allowed_data_prefix="\${resolved_server_path}/data/"
+allowed_local_prefix="\${resolved_server_path}/db/local/"
+case "\$resolved_db_path" in
+  "\$allowed_data_prefix"*|"\$allowed_local_prefix"*.sqlite|"\$allowed_local_prefix"*.sqlite-*) ;;
+  *)
+    echo "[deploy:vps:server] unsafe SQLITE_DB_PATH: \$resolved_db_path" >&2
+    echo "[deploy:vps:server] database must live under \$allowed_data_prefix or protected db/local sqlite files" >&2
+    exit 1
+    ;;
+esac
+
+echo "[deploy:vps:server] database path guard passed: \$resolved_db_path"
+
+if [[ "\$predeploy_backup" == "1" ]]; then
+  if [[ -f "\$resolved_db_path" ]]; then
+    if [[ ! -f "\$server_path/scripts/backup-sqlite.sh" ]]; then
+      echo "[deploy:vps:server] backup script missing; refusing deploy with existing database" >&2
+      exit 1
+    fi
+    echo "[deploy:vps:server] running pre-deploy SQLite backup"
+    BACKUP_ENV_FILE="\$env_file" bash "\$server_path/scripts/backup-sqlite.sh"
+  else
+    echo "[deploy:vps:server] database not found yet; skipping pre-deploy backup"
+  fi
+else
+  echo "[deploy:vps:server] pre-deploy backup disabled by VPS_PREDEPLOY_BACKUP=0"
+fi
+REMOTE
+}
+
 check_target() {
   local target_id=$1
   build_target_config "$target_id"
@@ -199,6 +271,9 @@ deploy_target() {
   echo "[deploy:vps:server] ensuring remote runtime directories"
   remote_bootstrap_command | "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s"
 
+  echo "[deploy:vps:server] checking database path and backup"
+  remote_predeploy_guard_command | "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s"
+
   echo "[deploy:vps:server] syncing server files"
   rsync -az --delete \
     --exclude='.DS_Store' \
@@ -210,6 +285,7 @@ deploy_target() {
     --exclude='.env' \
     --exclude='.env.*' \
     --exclude='.deploy.vps.env' \
+    --exclude='data/' \
     --exclude='db/local/*.sqlite' \
     --exclude='db/local/*.sqlite-*' \
     -e "$RSYNC_SSH_CMD" \

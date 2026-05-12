@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildAssetCacheHeaders,
+  buildCorsHeaders,
   buildPrivateApiCacheHeaders,
   buildPrivateFileCacheHeaders,
   isEtagNotModified
@@ -78,6 +79,42 @@ async function runTests() {
   const fileHeaders = buildPrivateFileCacheHeaders({ maxAge: 120, immutable: false });
   assert.equal(fileHeaders['Cache-Control'], 'private, max-age=120');
   assert.equal(fileHeaders.Vary, 'Origin, Authorization, Accept-Encoding');
+
+  const strictCorsHeaders = buildCorsHeaders(
+    new Request('http://wrong-host.example/api/orders', {
+      headers: { Origin: 'https://wrong-host.example' }
+    }),
+    new URL('http://wrong-host.example/api/orders'),
+    { ALLOWED_ORIGINS: 'https://expo.chinafife.com' }
+  );
+  assert.equal(strictCorsHeaders['Access-Control-Allow-Origin'], undefined);
+
+  const allowedCorsHeaders = buildCorsHeaders(
+    new Request('http://wrong-host.example/api/orders', {
+      headers: { Origin: 'https://expo.chinafife.com' }
+    }),
+    new URL('http://wrong-host.example/api/orders'),
+    { ALLOWED_ORIGINS: 'https://expo.chinafife.com' }
+  );
+  assert.equal(allowedCorsHeaders['Access-Control-Allow-Origin'], 'https://expo.chinafife.com');
+
+  const productionCorsWithoutAllowlist = buildCorsHeaders(
+    new Request('https://expo.chinafife.com/api/orders', {
+      headers: { Origin: 'https://expo.chinafife.com' }
+    }),
+    new URL('https://expo.chinafife.com/api/orders'),
+    { NODE_ENV: 'production' }
+  );
+  assert.equal(productionCorsWithoutAllowlist['Access-Control-Allow-Origin'], undefined);
+
+  const developmentCorsWithoutAllowlist = buildCorsHeaders(
+    new Request('http://localhost/api/orders', {
+      headers: { Origin: 'http://localhost' }
+    }),
+    new URL('http://localhost/api/orders'),
+    {}
+  );
+  assert.equal(developmentCorsWithoutAllowlist['Access-Control-Allow-Origin'], 'http://localhost');
 
   clearHomeDashboardCache();
   const homeCacheKey = buildHomeDashboardCacheKey(7, { role: 'sales', name: '张三' }, '2026-04-01', '2026-04-30');

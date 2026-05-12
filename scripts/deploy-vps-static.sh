@@ -5,7 +5,15 @@ set -euo pipefail
 SCRIPT_DIR=${0:A:h}
 PROJECT_ROOT=${SCRIPT_DIR:h}
 PUBLIC_DIR="$PROJECT_ROOT/public/"
-CONFIG_FILE=${DEPLOY_VPS_CONFIG_FILE:-$PROJECT_ROOT/.deploy.vps.env}
+LOCAL_CONFIG_FILE="$PROJECT_ROOT/.deploy.vps.env"
+DEFAULT_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/fuzhou-fishery-expo/deploy.vps.env"
+if [[ -n "${DEPLOY_VPS_CONFIG_FILE:-}" ]]; then
+  CONFIG_FILE="$DEPLOY_VPS_CONFIG_FILE"
+elif [[ -f "$DEFAULT_CONFIG_FILE" ]]; then
+  CONFIG_FILE="$DEFAULT_CONFIG_FILE"
+else
+  CONFIG_FILE="$LOCAL_CONFIG_FILE"
+fi
 
 if [[ -f "$CONFIG_FILE" ]]; then
   set -a
@@ -80,6 +88,10 @@ target_value() {
   echo "${(P)var_name:-}"
 }
 
+remote_quote() {
+  printf "%q" "$1"
+}
+
 print_config() {
   echo "[deploy:vps] config file: ${CONFIG_FILE}"
   echo "[deploy:vps] public dir: ${PUBLIC_DIR}"
@@ -143,6 +155,36 @@ build_target_config() {
   fi
 }
 
+guard_remote_static_path() {
+  local static_path=$(remote_quote "$VPS_STATIC_PATH")
+  "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s" <<REMOTE
+set -euo pipefail
+static_path=${static_path}
+if command -v realpath >/dev/null 2>&1; then
+  resolved_static_path="\$(realpath -m "\$static_path")"
+else
+  mkdir -p "\$static_path"
+  resolved_static_path="\$(cd "\$static_path" && pwd -P)"
+fi
+case "\$resolved_static_path" in
+  /var/www/*) ;;
+  *)
+    echo "[deploy:vps:static] refusing unsafe static path: \$resolved_static_path" >&2
+    echo "[deploy:vps:static] static path must be under /var/www/" >&2
+    exit 1
+    ;;
+esac
+if [[ "\$resolved_static_path" == "/var/www" ]]; then
+  echo "[deploy:vps:static] refusing to deploy directly into /var/www" >&2
+  exit 1
+fi
+mkdir -p "\$resolved_static_path"
+touch "\$resolved_static_path/.expo-static-root"
+test -w "\$resolved_static_path"
+echo "[deploy:vps:static] remote static path guard passed: \$resolved_static_path"
+REMOTE
+}
+
 check_connectivity_for_target() {
   local target_id=$1
   build_target_config "$target_id"
@@ -150,7 +192,7 @@ check_connectivity_for_target() {
   echo "[deploy:vps] checking ssh connectivity for ${target_id}"
   "${SSH_CMD[@]}" "$REMOTE_TARGET" "echo connected"
   echo "[deploy:vps] checking remote static directory access for ${target_id}"
-  "${SSH_CMD[@]}" "$REMOTE_TARGET" "mkdir -p '$VPS_STATIC_PATH' && test -w '$VPS_STATIC_PATH' && echo writable"
+  guard_remote_static_path
   echo "[deploy:vps] check done for ${target_id}"
 }
 
@@ -163,14 +205,14 @@ deploy_to_target() {
   build_target_config "$target_id"
   echo "[deploy:vps:static] target(${target_id}): ${REMOTE_TARGET}:${VPS_STATIC_PATH}"
   echo "[deploy:vps:static] ensuring remote directory $VPS_STATIC_PATH"
-  "${SSH_CMD[@]}" "$REMOTE_TARGET" "mkdir -p '$VPS_STATIC_PATH'"
+  guard_remote_static_path
 
   echo "[deploy:vps:static] syncing $PUBLIC_DIR -> $REMOTE_TARGET:$VPS_STATIC_PATH"
   if [[ "$HAS_RSYNC" == "1" ]] && remote_has_rsync; then
-    rsync -az --delete --exclude='.DS_Store' -e "$RSYNC_SSH_CMD" "$PUBLIC_DIR" "$REMOTE_TARGET:$VPS_STATIC_PATH"
+    rsync -az --delete --exclude='.DS_Store' --exclude='.expo-static-root' -e "$RSYNC_SSH_CMD" "$PUBLIC_DIR" "$REMOTE_TARGET:$VPS_STATIC_PATH"
   else
     echo "[deploy:vps:static] rsync unavailable locally or remotely; using tar stream fallback"
-    COPYFILE_DISABLE=1 tar --format ustar --exclude='.DS_Store' -C "$PUBLIC_DIR" -czf - . | "${SSH_CMD[@]}" "$REMOTE_TARGET" "set -e; mkdir -p '$VPS_STATIC_PATH'; find '$VPS_STATIC_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf {} +; tar -xzf - -C '$VPS_STATIC_PATH'; find '$VPS_STATIC_PATH' -name '._*' -delete"
+    COPYFILE_DISABLE=1 tar --format ustar --exclude='.DS_Store' -C "$PUBLIC_DIR" -czf - . | "${SSH_CMD[@]}" "$REMOTE_TARGET" "set -e; mkdir -p '$VPS_STATIC_PATH'; find '$VPS_STATIC_PATH' -mindepth 1 -maxdepth 1 ! -name '.expo-static-root' -exec rm -rf {} +; tar -xzf - -C '$VPS_STATIC_PATH'; find '$VPS_STATIC_PATH' -name '._*' -delete"
   fi
 
   echo "[deploy:vps:static] done for ${target_id}"

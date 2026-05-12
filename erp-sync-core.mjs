@@ -1,4 +1,5 @@
 const ERP_CLOSED_STATES = new Set(['closed', '已认领', '已完成', '认领完成']);
+const ERP_REFUND_FIELD_LIST = 'id,ecId,exhibitionId,customerId,company,recruitType,numberTotal,amountTotal,squareTotal,personTotal,personnelTotal,costDeal,costTotal,waterMoney,refundMoney,costActual,residue,ticketMoney,unTicketMoney,salesmanName,visaRemark,isShowDel,';
 
 function normalizeText(value) {
   return String(value || '').trim();
@@ -29,6 +30,20 @@ export function buildErpRequestUrl(config) {
   return buildErpRequestUrlWithSearch(config);
 }
 
+function isExhibitionConfirmdealEndpoint(url) {
+  return String(url?.pathname || '').includes('hyExhibitionConfirmdealController.do');
+}
+
+function ensureRefundEndpointParams(url) {
+  if (!isExhibitionConfirmdealEndpoint(url)) return;
+  if (!url.searchParams.has('isDealdatagrid')) {
+    url.searchParams.append('isDealdatagrid', '');
+  }
+  if (!url.searchParams.has('field')) {
+    url.searchParams.set('field', ERP_REFUND_FIELD_LIST);
+  }
+}
+
 export function buildErpRequestUrlWithSearch(config, searchKeyword = '') {
   const endpoint = normalizeText(config?.endpoint_url);
   if (!endpoint) throw new Error('未配置 ERP 接口地址');
@@ -42,8 +57,9 @@ export function buildErpRequestUrlWithSearch(config, searchKeyword = '') {
 
   const hasDatagridParam = url.searchParams.has('datagrid') || url.searchParams.has('isDealdatagrid');
   if (!hasDatagridParam) {
-    url.searchParams.append('datagrid', '');
+    url.searchParams.append(isExhibitionConfirmdealEndpoint(url) ? 'isDealdatagrid' : 'datagrid', '');
   }
+  ensureRefundEndpointParams(url);
 
   const scopeId = normalizeText(config?.water_id);
   const expectedProjectName = normalizeText(config?.expected_project_name);
@@ -97,12 +113,42 @@ export function buildErpRequestParamsWithSearch(config, page, pageSize, searchKe
     params.accountUI = '';
   } else if (!scopeId) {
     return params;
-  } else if (endpoint.includes('isDealdatagrid')) {
+  } else if (endpoint.includes('isDealdatagrid') || endpoint.includes('hyExhibitionConfirmdealController.do')) {
     params.exhibitionId = scopeId;
   } else if (endpoint.includes('hyDailyWaterSubController.do')) {
     params.waterId = scopeId;
   }
   return params;
+}
+
+export function buildErpRefundRequestConfig(config) {
+  const endpoint = normalizeText(config?.endpoint_url);
+  if (!endpoint) return null;
+
+  let url;
+  try {
+    url = new URL(endpoint);
+  } catch (error) {
+    throw new Error('ERP 接口地址格式不正确');
+  }
+
+  if (isExhibitionConfirmdealEndpoint(url)) {
+    ensureRefundEndpointParams(url);
+    return { ...config, endpoint_url: url.toString() };
+  }
+
+  if (!url.pathname.includes('hyDailyWaterController.do') && !url.pathname.includes('hyDailyWaterSubController.do')) {
+    return null;
+  }
+
+  url.pathname = url.pathname.replace(/[^/]+$/, 'hyExhibitionConfirmdealController.do');
+  url.search = '';
+  url.searchParams.append('isDealdatagrid', '');
+  url.searchParams.set('field', ERP_REFUND_FIELD_LIST);
+  return {
+    ...config,
+    endpoint_url: url.toString()
+  };
 }
 
 export function buildProjectSearchKeywords(projectName) {
@@ -129,6 +175,9 @@ export function extractErpRows(payload) {
 }
 
 export function normalizeErpRow(row) {
+  const rawPayload = row && typeof row === 'object' ? { ...row } : (row || {});
+  const sourceKind = normalizeText(rawPayload.__erpSyncKind);
+  delete rawPayload.__erpSyncKind;
   const rawState = normalizeText(row?.state || row?.status);
   const erpId = normalizeText(row?.id || row?.erpId || row?.waterSubId);
   const amount = normalizeMoney(row?.confirmMoney ?? row?.confirm_money ?? row?.waterMoney ?? row?.ofrmb ?? row?.amount ?? row?.money);
@@ -180,7 +229,8 @@ export function normalizeErpRow(row) {
     receiving_account_no: receivingAccountNo,
     refund_amount: refundAmount,
     payment_time: paymentTime,
-    raw: row || {}
+    source_kind: sourceKind,
+    raw: rawPayload
   };
 }
 
@@ -188,6 +238,7 @@ export function buildErpSyncPlan({
   rows = [],
   orders = [],
   existingErpIds = [],
+  existingRefundErpIds = [],
   expectedProjectName = '',
   expectedProjectId = ''
 }) {
@@ -199,7 +250,8 @@ export function buildErpSyncPlan({
     orderMap.get(key).push(order);
   });
 
-  const knownErpIds = new Set(existingErpIds.map((id) => normalizeText(id)).filter(Boolean));
+  const knownPaymentErpIds = new Set(existingErpIds.map((id) => normalizeText(id)).filter(Boolean));
+  const knownRefundErpIds = new Set(existingRefundErpIds.map((id) => normalizeText(id)).filter(Boolean));
   const expectedProject = normalizeText(expectedProjectName);
   const expectedScopeId = normalizeText(expectedProjectId);
 
@@ -207,6 +259,8 @@ export function buildErpSyncPlan({
     total_rows: rows.length,
     matched_count: 0,
     importable_count: 0,
+    payment_importable_count: 0,
+    refund_importable_count: 0,
     duplicate_count: 0,
     skipped_not_closed: 0,
     skipped_project_mismatch: 0,
@@ -220,6 +274,7 @@ export function buildErpSyncPlan({
 
   const preview = [];
   const importableItems = [];
+  const refundItems = [];
 
   rows.forEach((row) => {
     const normalized = normalizeErpRow(row);
@@ -228,6 +283,7 @@ export function buildErpSyncPlan({
       company_name: normalized.company_name || '(未提供)',
       project_name: normalized.project_name || '(未提供)',
       amount: normalized.amount,
+      refund_amount: normalized.refund_amount,
       state: normalized.state || '(未提供)'
     };
 
@@ -256,45 +312,88 @@ export function buildErpSyncPlan({
       return;
     }
 
-    if (normalized.refund_amount > 0) {
+    const isRefundSourceRow = normalized.source_kind === 'refund';
+    const isRefundRow = normalized.refund_amount > 0;
+    if (isRefundSourceRow && !isRefundRow) {
       summary.skipped_refund_related += 1;
-      preview.push({ ...previewItem, result: '跳过', reason: '包含退款金额，需人工复核' });
+      preview.push({ ...previewItem, sync_type: '退款', result: '跳过', reason: '退款认领记录无退款金额' });
       return;
     }
 
-    if (normalized.amount <= 0) {
+    const effectiveAmount = isRefundRow ? normalized.refund_amount : normalized.amount;
+    const effectivePreviewItem = isRefundRow
+      ? { ...previewItem, amount: normalized.refund_amount, sync_type: '退款' }
+      : { ...previewItem, sync_type: '收款' };
+
+    if (effectiveAmount <= 0) {
       summary.skipped_invalid_amount += 1;
-      preview.push({ ...previewItem, result: '跳过', reason: '金额无效' });
+      preview.push({ ...effectivePreviewItem, result: '跳过', reason: '金额无效' });
       return;
     }
 
+    const knownErpIds = isRefundRow ? knownRefundErpIds : knownPaymentErpIds;
     if (knownErpIds.has(normalized.erp_id)) {
       summary.duplicate_count += 1;
-      preview.push({ ...previewItem, result: '跳过', reason: 'ERP 收款记录已同步过' });
+      preview.push({ ...effectivePreviewItem, result: '跳过', reason: isRefundRow ? 'ERP 退款记录已同步过' : 'ERP 收款记录已同步过' });
       return;
     }
 
     const matches = orderMap.get(normalized.company_name) || [];
     if (matches.length === 0) {
       summary.unmatched_company += 1;
-      preview.push({ ...previewItem, result: '待处理', reason: '未找到同名订单企业' });
+      preview.push({ ...effectivePreviewItem, result: '待处理', reason: '未找到同名订单企业' });
       return;
     }
 
     if (matches.length > 1) {
       summary.ambiguous_company += 1;
-      preview.push({ ...previewItem, result: '待处理', reason: '匹配到多个同名企业订单' });
+      preview.push({ ...effectivePreviewItem, result: '待处理', reason: '匹配到多个同名企业订单' });
       return;
     }
 
     const matchedOrder = matches[0];
+    if (isRefundRow) {
+      summary.matched_count += 1;
+      summary.importable_count += 1;
+      summary.refund_importable_count += 1;
+      preview.push({
+        ...effectivePreviewItem,
+        result: '可同步',
+        reason: '已匹配订单退款',
+        matched_order_id: matchedOrder.id
+      });
+
+      refundItems.push({
+        erp_record_id: normalized.erp_id,
+        order_id: matchedOrder.id,
+        project_id: matchedOrder.project_id,
+        amount: effectiveAmount,
+        created_at: normalized.payment_time || new Date().toISOString().slice(0, 10),
+        payee_name: normalized.company_name || matchedOrder.company_name || '退款',
+        payee_channel: normalized.bank_name || 'ERP同步',
+        payee_bank: normalized.bank_name || '',
+        payee_account: '',
+        applicant: 'ERP同步',
+        reason: [
+          `ERP退款同步导入：${normalized.project_name || '未注明项目'}`,
+          `ERP记录：${normalized.erp_id}`,
+          normalized.amount > 0 ? `ERP收款金额：${normalized.amount.toFixed(2)}` : '',
+          `ERP退款金额：${effectiveAmount.toFixed(2)}`
+        ].filter(Boolean).join(' | '),
+        source: 'ERP_SYNC_REFUND',
+        raw_payload: JSON.stringify(normalized.raw)
+      });
+      return;
+    }
+
     const futurePaidAmount = normalizeMoney(Number(matchedOrder.paid_amount || 0) + normalized.amount);
     const willOverpay = futurePaidAmount > normalizeMoney(matchedOrder.total_amount || 0) + 0.01;
 
     summary.matched_count += 1;
     summary.importable_count += 1;
+    summary.payment_importable_count += 1;
     preview.push({
-      ...previewItem,
+      ...effectivePreviewItem,
       result: '可同步',
       reason: willOverpay ? '已匹配订单，入账后会触发超收异常待处理' : '已匹配订单',
       overpaid_after_sync: willOverpay,
@@ -327,6 +426,7 @@ export function buildErpSyncPlan({
   return {
     summary,
     preview,
-    importableItems
+    importableItems,
+    refundItems
   };
 }

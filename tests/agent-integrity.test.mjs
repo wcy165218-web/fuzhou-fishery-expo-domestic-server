@@ -190,7 +190,7 @@ async function testAddCommissionExpenseRejectsUnknownAgent() {
 async function testDeleteCommissionExpenseReturnsDeletedExpenseSnapshot() {
   const env = createMockEnv({
     firstResponses: {
-      'SELECT id, order_id, project_id, expense_type, payee_name, amount FROM Expenses WHERE id = ? AND deleted_at IS NULL': {
+      'SELECT id, order_id, project_id, expense_type, payee_name, amount, source FROM Expenses WHERE id = ? AND deleted_at IS NULL': {
         id: 11,
         order_id: 3,
         project_id: 1,

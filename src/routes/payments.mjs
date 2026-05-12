@@ -19,6 +19,10 @@ import { refreshOrderReleaseDue } from '../services/order-release.mjs';
 const PAYMENT_LIST_DEFAULT_PAGE_SIZE = 20;
 const PAYMENT_LIST_MAX_PAGE_SIZE = 100;
 
+function isErpPaymentSource(source) {
+    return String(source || '').startsWith('ERP_SYNC');
+}
+
 function normalizePaymentListParams(urlObj) {
     const rawPage = Number(urlObj.searchParams.get('page') || 1);
     const rawPageSize = Number(urlObj.searchParams.get('pageSize') || PAYMENT_LIST_DEFAULT_PAGE_SIZE);
@@ -156,7 +160,7 @@ export async function handlePaymentRoutes({
             const payment = await getPaymentRecord(env, payment_id);
             if (!payment) return errorResponse('支付记录不存在', 404, corsHeaders);
             if (payment.deleted_at) return errorResponse('收款记录已删除', 400, corsHeaders);
-            if (payment.source === 'ERP_SYNC') return errorResponse('ERP 同步流水不允许手动删除', 400, corsHeaders);
+            if (isErpPaymentSource(payment.source)) return errorResponse('ERP 同步流水不允许手动删除', 400, corsHeaders);
             const hasPermission = await canManageOrder(env, currentUser, Number(payment.order_id));
             if (!hasPermission) return errorResponse('权限不足', 403, corsHeaders);
 
@@ -210,7 +214,7 @@ export async function handlePaymentRoutes({
             const oldPayment = await getPaymentRecord(env, payment.payment_id);
             if (!oldPayment) return errorResponse('收款记录不存在', 404, corsHeaders);
             if (oldPayment.deleted_at) return errorResponse('收款记录已删除', 400, corsHeaders);
-            if (oldPayment.source === 'ERP_SYNC') return errorResponse('ERP 同步流水不允许手动修改', 400, corsHeaders);
+            if (isErpPaymentSource(oldPayment.source)) return errorResponse('ERP 同步流水不允许手动修改', 400, corsHeaders);
             const hasPermission = await canManageOrder(env, currentUser, Number(oldPayment.order_id));
             if (!hasPermission) return errorResponse('权限不足', 403, corsHeaders);
 

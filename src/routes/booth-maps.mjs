@@ -18,7 +18,8 @@ import { isSuperAdmin } from '../utils/auth.mjs';
 import {
     deriveHallFromBoothCode,
     normalizeBoothCode,
-    resolveHallFromMapName
+    resolveHallFromMapName,
+    splitBoothCodeList
 } from '../utils/booth-map.mjs';
 
 const ALLOWED_BOOTH_TYPES = new Set(['标摊', '豪标', '光地']);
@@ -168,77 +169,20 @@ async function getActiveReferencedBoothCodes(env, projectId, boothCodes) {
     ));
     if (normalizedBoothCodes.length === 0) return [];
     const referencedCodes = new Set();
-    for (const boothCodeChunk of chunkItems(normalizedBoothCodes)) {
-        const placeholders = boothCodeChunk.map(() => '?').join(',');
-        const results = await env.DB.prepare(`
-          SELECT booth_id
-          FROM Orders
-          WHERE project_id = ?
-            AND status = '正常'
-            AND UPPER(TRIM(booth_id)) IN (${placeholders})
-          GROUP BY booth_id
-        `).bind(Number(projectId), ...boothCodeChunk).all();
-        (results.results || []).forEach((row) => {
-            const normalized = normalizeBoothCode(row.booth_id);
-            if (normalized) referencedCodes.add(normalized);
+    const normalizedBoothCodeSet = new Set(normalizedBoothCodes);
+    const results = await env.DB.prepare(`
+      SELECT booth_id
+      FROM Orders
+      WHERE project_id = ?
+        AND status = '正常'
+        AND COALESCE(booth_id, '') != ''
+    `).bind(Number(projectId)).all();
+    (results.results || []).forEach((row) => {
+        splitBoothCodeList(row.booth_id).forEach((boothCode) => {
+            if (normalizedBoothCodeSet.has(boothCode)) referencedCodes.add(boothCode);
         });
-    }
+    });
     return Array.from(referencedCodes);
-}
-
-async function getExistingBoothMapItemsByCode(env, projectId, mapId, boothCodes) {
-    const normalizedBoothCodes = Array.from(new Set(
-        (Array.isArray(boothCodes) ? boothCodes : [])
-            .map((code) => normalizeBoothCode(code))
-            .filter(Boolean)
-    ));
-    const rowsByCode = new Map();
-    if (normalizedBoothCodes.length === 0) return rowsByCode;
-    for (const boothCodeChunk of chunkItems(normalizedBoothCodes)) {
-        const placeholders = boothCodeChunk.map(() => '?').join(',');
-        const results = await env.DB.prepare(`
-          SELECT booth_code, hall, booth_type, opening_type, width_m, height_m, area,
-                 shape_type, points_json, hidden
-          FROM BoothMapItems
-          WHERE project_id = ?
-            AND map_id = ?
-            AND booth_code IN (${placeholders})
-        `).bind(Number(projectId), Number(mapId), ...boothCodeChunk).all();
-        (results.results || []).forEach((row) => {
-            const normalized = normalizeBoothCode(row.booth_code);
-            if (normalized) rowsByCode.set(normalized, row);
-        });
-    }
-    return rowsByCode;
-}
-
-function sameNumber(leftValue, rightValue) {
-    return Math.abs(Number(leftValue || 0) - Number(rightValue || 0)) < 0.01;
-}
-
-function normalizePointsJsonForCompare(value) {
-    return JSON.stringify(safeParseJson(value, []));
-}
-
-function findActiveBoothMapItemLockError(normalizedItems, activeBoothCodes, existingRowsByCode) {
-    for (const item of normalizedItems) {
-        if (!activeBoothCodes.has(item.booth_code)) continue;
-        const existing = existingRowsByCode.get(item.booth_code);
-        if (!existing) continue;
-        const changedSpec = !sameNumber(existing.width_m, item.width_m)
-            || !sameNumber(existing.height_m, item.height_m)
-            || !sameNumber(existing.area, item.area)
-            || String(existing.shape_type || 'rect') !== String(item.shape_type || 'rect')
-            || normalizePointsJsonForCompare(existing.points_json) !== normalizePointsJsonForCompare(item.points_json)
-            || Number(existing.hidden || 0) !== Number(item.hidden || 0);
-        const changedOpeningWithoutType = String(existing.booth_type || '') === String(item.booth_type || '')
-            && String(existing.opening_type || '') !== String(item.opening_type || '');
-        const changedHall = String(existing.hall || '') !== String(item.hall || '');
-        if (changedSpec || changedOpeningWithoutType || changedHall) {
-            return `展位 ${item.booth_code} 已有正常订单，仅允许修改展位类型和画布位置，不能修改面积、规格或隐藏状态`;
-        }
-    }
-    return '';
 }
 
 async function getOccupiedBoothMapRows(env, projectId, mapId, boothCodes) {
@@ -272,16 +216,175 @@ export function estimateBoothMapSaveD1CallCount({
     itemCount = 0,
     removedCount = 0,
     renamedCount = 0,
+    orderSyncStatementCount = 0,
     occupiedReadCalls = 0,
     removedReferencedReadCalls = 0,
-    renamedReferencedReadCalls = 0
+    renamedReferencedReadCalls = 0,
+    orderSyncReadCalls = 0
 } = {}) {
-    const writeStatementCount = (Number(removedCount || 0) * 2) + (Number(renamedCount || 0) * 2) + (Number(itemCount || 0) * 2) + 1;
+    const writeStatementCount = (Number(removedCount || 0) * 2)
+        + (Number(renamedCount || 0) * 2)
+        + (Number(itemCount || 0) * 2)
+        + Number(orderSyncStatementCount || 0)
+        + 1;
     return 3
         + Number(occupiedReadCalls || 0)
         + Number(removedReferencedReadCalls || 0)
         + Number(renamedReferencedReadCalls || 0)
+        + Number(orderSyncReadCalls || 0)
         + Math.ceil(writeStatementCount / BATCH_CHUNK_SIZE);
+}
+
+function getBoothPriceUnit(boothType) {
+    return String(boothType || '').trim() === '光地' ? '平米' : '个';
+}
+
+function buildRenamedBoothCodeMap(normalizedItems, incomingItems) {
+    const renamedBoothCodeMap = new Map();
+    (Array.isArray(normalizedItems) ? normalizedItems : []).forEach((item, index) => {
+        const previousBoothCode = normalizeBoothCode(incomingItems?.[index]?.previous_booth_code);
+        if (previousBoothCode && previousBoothCode !== item.booth_code) {
+            renamedBoothCodeMap.set(previousBoothCode, item.booth_code);
+        }
+    });
+    return renamedBoothCodeMap;
+}
+
+export function replaceOrderBoothCodes(rawBoothId, renamedBoothCodeMap) {
+    const boothIds = splitBoothCodeList(rawBoothId);
+    if (boothIds.length === 0 || !(renamedBoothCodeMap instanceof Map) || renamedBoothCodeMap.size === 0) {
+        return boothIds.join(', ');
+    }
+    return boothIds
+        .map((boothId) => renamedBoothCodeMap.get(boothId) || boothId)
+        .join(', ');
+}
+
+async function getBoothRowsByCode(env, projectId, boothCodes) {
+    const normalizedBoothCodes = Array.from(new Set(
+        (Array.isArray(boothCodes) ? boothCodes : [])
+            .map((code) => normalizeBoothCode(code))
+            .filter(Boolean)
+    ));
+    const rowsByCode = new Map();
+    if (normalizedBoothCodes.length === 0) return rowsByCode;
+    for (const boothCodeChunk of chunkItems(normalizedBoothCodes)) {
+        const placeholders = boothCodeChunk.map(() => '?').join(',');
+        const rows = ((await env.DB.prepare(`
+          SELECT id, hall, type, area, price_unit
+          FROM Booths
+          WHERE project_id = ?
+            AND id IN (${placeholders})
+        `).bind(Number(projectId), ...boothCodeChunk).all()).results || []);
+        rows.forEach((row) => {
+            const boothCode = normalizeBoothCode(row.id);
+            if (!boothCode) return;
+            rowsByCode.set(boothCode, {
+                id: boothCode,
+                hall: String(row.hall || ''),
+                type: String(row.type || ''),
+                area: Number(row.area || 0),
+                price_unit: String(row.price_unit || getBoothPriceUnit(row.type))
+            });
+        });
+    }
+    return rowsByCode;
+}
+
+async function buildOrderSyncStatementsForBoothMapSave(env, projectId, normalizedItems, renamedBoothCodeMap, nowText) {
+    if ((!Array.isArray(normalizedItems) || normalizedItems.length === 0) && (!(renamedBoothCodeMap instanceof Map) || renamedBoothCodeMap.size === 0)) {
+        return { statements: [], affectedOrderIds: [], affectedBoothCodes: [] };
+    }
+    const itemRowsByCode = new Map(
+        (Array.isArray(normalizedItems) ? normalizedItems : []).map((item) => [
+            item.booth_code,
+            {
+                id: item.booth_code,
+                hall: item.hall,
+                type: item.booth_type,
+                area: Number(item.area || 0),
+                price_unit: getBoothPriceUnit(item.booth_type)
+            }
+        ])
+    );
+    const directlyChangedBoothCodes = new Set(itemRowsByCode.keys());
+    const renamedFromCodes = new Set(renamedBoothCodeMap.keys());
+    const activeOrderRows = ((await env.DB.prepare(`
+      SELECT id, booth_id, area, price_unit
+      FROM Orders
+      WHERE project_id = ?
+        AND status = '正常'
+        AND COALESCE(booth_id, '') != ''
+    `).bind(Number(projectId)).all()).results || []);
+
+    const affectedOrders = [];
+    const missingBoothCodes = new Set();
+    activeOrderRows.forEach((order) => {
+        const currentBoothIds = splitBoothCodeList(order.booth_id);
+        if (currentBoothIds.length === 0) return;
+        const nextBoothIds = currentBoothIds.map((boothId) => renamedBoothCodeMap.get(boothId) || boothId);
+        const isAffected = currentBoothIds.some((boothId) => directlyChangedBoothCodes.has(boothId) || renamedFromCodes.has(boothId))
+            || nextBoothIds.some((boothId) => directlyChangedBoothCodes.has(boothId));
+        if (!isAffected) return;
+        nextBoothIds.forEach((boothId) => {
+            if (!itemRowsByCode.has(boothId)) missingBoothCodes.add(boothId);
+        });
+        affectedOrders.push({ order, currentBoothIds, nextBoothIds });
+    });
+
+    if (affectedOrders.length === 0) {
+        return { statements: [], affectedOrderIds: [], affectedBoothCodes: [] };
+    }
+
+    const boothRowsByCode = await getBoothRowsByCode(env, projectId, Array.from(missingBoothCodes));
+    const statements = [];
+    const affectedOrderIds = [];
+    const affectedBoothCodes = new Set();
+
+    affectedOrders.forEach(({ order, currentBoothIds, nextBoothIds }) => {
+        const boothRows = nextBoothIds
+            .map((boothId) => itemRowsByCode.get(boothId) || boothRowsByCode.get(boothId))
+            .filter(Boolean);
+        if (boothRows.length !== nextBoothIds.length) return;
+        const nextBoothId = nextBoothIds.join(', ');
+        const nextArea = roundTo(boothRows.reduce((sum, row) => sum + Number(row.area || 0), 0), 2);
+        const nextPriceUnit = boothRows.length === 1 ? boothRows[0].price_unit : '组合';
+        const boothChanged = nextBoothId !== splitBoothCodeList(order.booth_id).join(', ');
+        const areaChanged = Math.abs(Number(order.area || 0) - nextArea) >= 0.01;
+        const priceUnitChanged = String(order.price_unit || '') !== String(nextPriceUnit || '');
+        if (!boothChanged && !areaChanged && !priceUnitChanged) return;
+
+        affectedOrderIds.push(Number(order.id || 0));
+        currentBoothIds.forEach((boothId) => affectedBoothCodes.add(boothId));
+        nextBoothIds.forEach((boothId) => affectedBoothCodes.add(boothId));
+        statements.push(
+            env.DB.prepare(`
+              UPDATE Orders
+              SET booth_id = ?,
+                  area = ?,
+                  price_unit = ?
+              WHERE id = ? AND project_id = ?
+            `).bind(nextBoothId, nextArea, nextPriceUnit, Number(order.id), Number(projectId))
+        );
+    });
+
+    renamedBoothCodeMap.forEach((nextBoothCode, previousBoothCode) => {
+        statements.push(
+            env.DB.prepare(`
+              UPDATE ExhibitionLintels
+              SET booth_code = ?,
+                  updated_at = ?
+              WHERE project_id = ?
+                AND booth_code = ?
+            `).bind(nextBoothCode, nowText, Number(projectId), previousBoothCode)
+        );
+    });
+
+    return {
+        statements,
+        affectedOrderIds: affectedOrderIds.filter(Boolean),
+        affectedBoothCodes: Array.from(affectedBoothCodes)
+    };
 }
 
 function normalizeBoothMapItemPayload(item, mapRecord, index) {
@@ -680,16 +783,6 @@ export async function handleBoothMapRoutes({
                 normalizeBoothMapItemPayload(item, detail.map, index)
             );
             const boothCodes = normalizedItems.map((item) => item.booth_code);
-            const activeReferencedBoothCodes = await getActiveReferencedBoothCodes(env, projectId, boothCodes);
-            if (activeReferencedBoothCodes.length > 0) {
-                const existingRowsByCode = await getExistingBoothMapItemsByCode(env, projectId, mapId, activeReferencedBoothCodes);
-                const lockError = findActiveBoothMapItemLockError(
-                    normalizedItems,
-                    new Set(activeReferencedBoothCodes),
-                    existingRowsByCode
-                );
-                if (lockError) return errorResponse(lockError, 400, corsHeaders);
-            }
             const requestedDeletedBoothCodes = Array.from(new Set(
                 (Array.isArray(payload.deleted_booth_codes) ? payload.deleted_booth_codes : [])
                     .map((code) => normalizeBoothCode(code))
@@ -713,26 +806,34 @@ export async function handleBoothMapRoutes({
               WHERE project_id = ? AND map_id = ?
             `).bind(projectId, mapId).all()).results || []);
             const existingBoothCodes = existingRows.map((row) => normalizeBoothCode(row.booth_code)).filter(Boolean);
-            const removedBoothCodes = replaceAll
-                ? existingBoothCodes.filter((code) => !boothCodes.includes(code))
-                : requestedDeletedBoothCodes.filter((code) => existingBoothCodes.includes(code) && !boothCodes.includes(code));
-            const renamedPreviousBoothCodes = Array.from(new Set(
-                normalizedItems.map((item, index) => {
-                    const previousBoothCode = normalizeBoothCode(incomingItems[index]?.previous_booth_code);
-                    return previousBoothCode && previousBoothCode !== item.booth_code ? previousBoothCode : '';
-                }).filter(Boolean)
+            const previousBoothCodes = Array.from(new Set(
+                incomingItems
+                    .map((item) => normalizeBoothCode(item?.previous_booth_code))
+                    .filter(Boolean)
             ));
-            const estimatedD1CallCount = estimateBoothMapSaveD1CallCount({
-                itemCount: normalizedItems.length,
-                removedCount: removedBoothCodes.length,
-                renamedCount: renamedPreviousBoothCodes.length,
-                occupiedReadCalls: boothCodes.length > 0 ? chunkItems(boothCodes).length : 0,
-                removedReferencedReadCalls: removedBoothCodes.length > 0 ? chunkItems(removedBoothCodes).length : 0,
-                renamedReferencedReadCalls: renamedPreviousBoothCodes.length > 0 ? chunkItems(renamedPreviousBoothCodes).length : 0
-            });
-            if (estimatedD1CallCount > D1_FREE_TIER_CALL_BUDGET) {
-                return errorResponse('本次展位图变更过大，请拆分后重试', 400, corsHeaders);
+            const previousBoothCodeSet = new Set(previousBoothCodes);
+            const activeTargetBoothCodes = await getActiveReferencedBoothCodes(env, projectId, boothCodes);
+            const conflictingActiveTargetBoothCode = activeTargetBoothCodes.find((code) => !previousBoothCodeSet.has(code));
+            if (conflictingActiveTargetBoothCode) {
+                return errorResponse(`展位 ${conflictingActiveTargetBoothCode} 已被订单引用，不能作为新的展位号`, 400, corsHeaders);
             }
+            if (replaceAll === false) {
+                const existingBoothCodeSet = new Set(existingBoothCodes);
+                const conflictingItem = normalizedItems.find((item, index) => {
+                    const previousBoothCode = normalizeBoothCode(incomingItems[index]?.previous_booth_code);
+                    if (!existingBoothCodeSet.has(item.booth_code)) return false;
+                    if (previousBoothCode === item.booth_code) return false;
+                    return !previousBoothCodeSet.has(item.booth_code);
+                });
+                if (conflictingItem) {
+                    return errorResponse(`展位号重复：${conflictingItem.booth_code}`, 400, corsHeaders);
+                }
+            }
+            const renamedBoothCodeMap = buildRenamedBoothCodeMap(normalizedItems, incomingItems);
+            const renamedPreviousBoothCodes = Array.from(renamedBoothCodeMap.keys());
+            const removedBoothCodes = replaceAll
+                ? existingBoothCodes.filter((code) => !boothCodes.includes(code) && !renamedBoothCodeMap.has(code))
+                : requestedDeletedBoothCodes.filter((code) => existingBoothCodes.includes(code) && !boothCodes.includes(code) && !renamedBoothCodeMap.has(code));
 
             const activeRemovedBoothCodes = await getActiveReferencedBoothCodes(env, projectId, removedBoothCodes);
             if (activeRemovedBoothCodes.length > 0) {
@@ -740,12 +841,28 @@ export async function handleBoothMapRoutes({
                 const suffix = activeRemovedBoothCodes.length > 5 ? ' 等' : '';
                 return errorResponse(`以下展位已被订单引用，不能从展位图中删除：${previewText}${suffix}`, 400, corsHeaders);
             }
-            const activeRenamedBoothCodes = await getActiveReferencedBoothCodes(env, projectId, renamedPreviousBoothCodes);
-            if (activeRenamedBoothCodes.length > 0) {
-                return errorResponse(`展位 ${activeRenamedBoothCodes[0]} 已被订单引用，暂时不能改展位号`, 400, corsHeaders);
-            }
 
             const nowText = getChinaTimestamp();
+            const orderSyncResult = await buildOrderSyncStatementsForBoothMapSave(
+                env,
+                projectId,
+                normalizedItems,
+                renamedBoothCodeMap,
+                nowText
+            );
+            const estimatedD1CallCount = estimateBoothMapSaveD1CallCount({
+                itemCount: normalizedItems.length,
+                removedCount: removedBoothCodes.length,
+                renamedCount: renamedPreviousBoothCodes.length,
+                orderSyncStatementCount: orderSyncResult.statements.length,
+                occupiedReadCalls: boothCodes.length > 0 ? chunkItems(boothCodes).length : 0,
+                removedReferencedReadCalls: removedBoothCodes.length > 0 ? 1 : 0,
+                orderSyncReadCalls: normalizedItems.length > 0 || renamedBoothCodeMap.size > 0 ? 1 : 0
+            });
+            if (estimatedD1CallCount > D1_FREE_TIER_CALL_BUDGET) {
+                return errorResponse('本次展位图变更过大，请拆分后重试', 400, corsHeaders);
+            }
+
             const statements = [];
             removedBoothCodes.forEach((boothCode) => {
                 statements.push(
@@ -757,20 +874,19 @@ export async function handleBoothMapRoutes({
                         .bind(projectId, mapId, boothCode)
                 );
             });
+            renamedPreviousBoothCodes.forEach((previousBoothCode) => {
+                statements.push(
+                    env.DB.prepare('DELETE FROM BoothMapItems WHERE project_id = ? AND map_id = ? AND booth_code = ?')
+                        .bind(projectId, mapId, previousBoothCode)
+                );
+                statements.push(
+                    env.DB.prepare('DELETE FROM Booths WHERE project_id = ? AND booth_map_id = ? AND id = ?')
+                        .bind(projectId, mapId, previousBoothCode)
+                );
+            });
 
             for (let index = 0; index < normalizedItems.length; index += 1) {
                 const item = normalizedItems[index];
-                const previousBoothCode = normalizeBoothCode(incomingItems[index]?.previous_booth_code);
-                if (previousBoothCode && previousBoothCode !== item.booth_code) {
-                    statements.push(
-                        env.DB.prepare('DELETE FROM BoothMapItems WHERE project_id = ? AND map_id = ? AND booth_code = ?')
-                            .bind(projectId, mapId, previousBoothCode)
-                    );
-                    statements.push(
-                        env.DB.prepare('DELETE FROM Booths WHERE project_id = ? AND booth_map_id = ? AND id = ?')
-                            .bind(projectId, mapId, previousBoothCode)
-                    );
-                }
                 statements.push(env.DB.prepare(`
                   INSERT INTO BoothMapItems (
                     project_id, map_id, booth_code, hall, booth_type, opening_type,
@@ -846,6 +962,7 @@ export async function handleBoothMapRoutes({
                 ));
             }
 
+            statements.push(...orderSyncResult.statements);
             statements.push(
                 env.DB.prepare('UPDATE BoothMaps SET updated_at = ? WHERE id = ? AND project_id = ?')
                     .bind(nowText, mapId, projectId)
@@ -858,6 +975,7 @@ export async function handleBoothMapRoutes({
                 success: true,
                 saved_count: normalizedItems.length,
                 synced_booth_count: normalizedItems.length,
+                synced_order_count: orderSyncResult.affectedOrderIds.length,
                 updated_at: nowText
             }, corsHeaders);
         } catch (error) {

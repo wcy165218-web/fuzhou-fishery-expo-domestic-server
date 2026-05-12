@@ -139,6 +139,25 @@ function validateErpConfigPayload(payload, corsHeaders) {
     };
 }
 
+function buildErpConfigResponse(config, projectId) {
+    const source = config || {
+        project_id: Number(projectId),
+        enabled: 0,
+        endpoint_url: '',
+        water_id: '',
+        session_cookie: '',
+        expected_project_name: '',
+        last_sync_at: '',
+        last_sync_summary: ''
+    };
+    const hasSessionCookie = !!String(source.session_cookie || '').trim();
+    return {
+        ...source,
+        session_cookie: '',
+        has_session_cookie: hasSessionCookie
+    };
+}
+
 async function getExistingErpPaymentsMap(env, erpRecordIds = []) {
     const normalizedErpRecordIds = Array.from(new Set(
         (Array.isArray(erpRecordIds) ? erpRecordIds : [])
@@ -169,6 +188,37 @@ async function getExistingErpPaymentsMap(env, erpRecordIds = []) {
         });
     }
     return existingPaymentsMap;
+}
+
+async function getExistingErpRefundsMap(env, erpRecordIds = []) {
+    const normalizedErpRecordIds = Array.from(new Set(
+        (Array.isArray(erpRecordIds) ? erpRecordIds : [])
+            .map((erpRecordId) => String(erpRecordId || '').trim())
+            .filter(Boolean)
+    ));
+    const existingRefundsMap = new Map();
+    for (const erpRecordIdChunk of chunkItems(normalizedErpRecordIds)) {
+        const placeholders = erpRecordIdChunk.map(() => '?').join(',');
+        const rows = ((await env.DB.prepare(`
+            SELECT
+                p.id,
+                p.order_id,
+                p.project_id,
+                p.amount,
+                p.erp_record_id
+            FROM Payments p
+            WHERE p.deleted_at IS NULL
+              AND p.source = 'ERP_SYNC_REFUND'
+              AND p.erp_record_id IN (${placeholders})
+        `).bind(...erpRecordIdChunk).all()).results || []);
+        rows.forEach((row) => {
+            const erpRecordId = String(row.erp_record_id || '').trim();
+            if (erpRecordId && !existingRefundsMap.has(erpRecordId)) {
+                existingRefundsMap.set(erpRecordId, row);
+            }
+        });
+    }
+    return existingRefundsMap;
 }
 
 async function getActiveBoothIdsByOrderPairs(env, rawOrderPairs = []) {
@@ -258,16 +308,7 @@ export async function handleConfigRoutes({
         const pid = new URL(request.url).searchParams.get('projectId');
         if (!pid) return errorResponse('缺少项目 ID', 400, corsHeaders);
         const config = await getErpConfig(env, pid);
-        return new Response(JSON.stringify(config || {
-            project_id: Number(pid),
-            enabled: 0,
-            endpoint_url: '',
-            water_id: '',
-            session_cookie: '',
-            expected_project_name: '',
-            last_sync_at: '',
-            last_sync_summary: ''
-        }), { headers: corsHeaders });
+        return new Response(JSON.stringify(buildErpConfigResponse(config, pid)), { headers: corsHeaders });
     }
 
     if (url.pathname === '/api/order-field-settings' && request.method === 'GET') {
@@ -402,7 +443,7 @@ export async function handleConfigRoutes({
             success: true,
             summary: plan.summary,
             preview: plan.preview.slice(0, 50),
-            can_sync: plan.importableItems.length > 0
+            can_sync: (plan.importableItems.length + (plan.refundItems?.length || 0)) > 0
         }), { headers: corsHeaders });
     }
 
@@ -420,15 +461,25 @@ export async function handleConfigRoutes({
         }
 
         const plan = await buildErpPreviewResult(env, projectId, config);
-        if (plan.importableItems.length > 0) {
-            const existingPaymentsMap = await getExistingErpPaymentsMap(
-                env,
-                plan.importableItems.map((item) => item.erp_record_id)
-            );
+        const paymentItems = plan.importableItems || [];
+        const refundItems = plan.refundItems || [];
+        if (paymentItems.length > 0 || refundItems.length > 0) {
+            const existingPaymentsMap = paymentItems.length > 0
+                ? await getExistingErpPaymentsMap(
+                    env,
+                    paymentItems.map((item) => item.erp_record_id)
+                )
+                : new Map();
+            const existingRefundsMap = refundItems.length > 0
+                ? await getExistingErpRefundsMap(
+                    env,
+                    refundItems.map((item) => item.erp_record_id)
+                )
+                : new Map();
             const statements = [];
             const affectedOrderPairs = new Set();
 
-            for (const item of plan.importableItems) {
+            for (const item of paymentItems) {
                 const erpRecordId = String(item.erp_record_id || '').trim();
                 const existingPayment = existingPaymentsMap.get(erpRecordId);
                 if (existingPayment) {
@@ -504,22 +555,68 @@ export async function handleConfigRoutes({
                 affectedOrderPairs.add(`${Number(item.project_id)}::${Number(item.order_id)}`);
             }
 
+            for (const item of refundItems) {
+                const erpRecordId = String(item.erp_record_id || '').trim();
+                if (!erpRecordId || existingRefundsMap.has(erpRecordId)) {
+                    continue;
+                }
+                const refundAmount = Number(item.amount || 0);
+
+                statements.push(
+                    env.DB.prepare(`
+                        INSERT INTO Payments (
+                            project_id,
+                            order_id,
+                            amount,
+                            payment_time,
+                            payer_name,
+                            bank_name,
+                            remarks,
+                            source,
+                            erp_record_id,
+                            raw_payload
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `).bind(
+                        Number(item.project_id),
+                        Number(item.order_id),
+                        -Math.abs(refundAmount),
+                        String(item.created_at || new Date().toISOString().slice(0, 10)),
+                        String(item.payee_name || '退款'),
+                        String(item.payee_channel || 'ERP同步'),
+                        String(item.reason || 'ERP退款同步导入'),
+                        String(item.source || 'ERP_SYNC_REFUND'),
+                        erpRecordId,
+                        String(item.raw_payload || '')
+                    ),
+                    env.DB.prepare('UPDATE Orders SET paid_amount = MAX(0, ROUND(paid_amount - ?, 2)) WHERE id = ?')
+                        .bind(Math.abs(refundAmount), Number(item.order_id))
+                );
+                affectedOrderPairs.add(`${Number(item.project_id)}::${Number(item.order_id)}`);
+            }
+
             await executeStatementsInChunks(env, statements);
 
-            const boothIdsByProject = await getActiveBoothIdsByOrderPairs(env, Array.from(affectedOrderPairs));
-            for (const [syncedProjectId, boothIds] of boothIdsByProject.entries()) {
-                await syncBoothStatusByBoothIds(env, Number(syncedProjectId), Array.from(boothIds));
+            if (affectedOrderPairs.size > 0) {
+                const boothIdsByProject = await getActiveBoothIdsByOrderPairs(env, Array.from(affectedOrderPairs));
+                for (const [syncedProjectId, boothIds] of boothIdsByProject.entries()) {
+                    await syncBoothStatusByBoothIds(env, Number(syncedProjectId), Array.from(boothIds));
+                }
+                for (const pair of affectedOrderPairs) {
+                    const [, rawOrderId] = String(pair).split('::');
+                    if (rawOrderId) await refreshOrderReleaseDue(env, Number(rawOrderId));
+                }
+                await refreshOrderOverpaymentIssues(env, Array.from(affectedOrderPairs));
             }
-            for (const pair of affectedOrderPairs) {
-                const [, rawOrderId] = String(pair).split('::');
-                if (rawOrderId) await refreshOrderReleaseDue(env, Number(rawOrderId));
-            }
-            await refreshOrderOverpaymentIssues(env, Array.from(affectedOrderPairs));
-            invalidateHomeDashboardCache(projectId);
+            if (statements.length > 0) invalidateHomeDashboardCache(projectId);
         }
 
+        const syncedPaymentCount = paymentItems.length;
+        const syncedRefundCount = refundItems.length;
+        const syncedCount = syncedPaymentCount + syncedRefundCount;
         const syncSummary = JSON.stringify({
-            synced_count: plan.importableItems.length,
+            synced_count: syncedCount,
+            synced_payment_count: syncedPaymentCount,
+            synced_refund_count: syncedRefundCount,
             summary: plan.summary
         });
 
@@ -531,7 +628,9 @@ export async function handleConfigRoutes({
 
         return new Response(JSON.stringify({
             success: true,
-            synced_count: plan.importableItems.length,
+            synced_count: syncedCount,
+            synced_payment_count: syncedPaymentCount,
+            synced_refund_count: syncedRefundCount,
             summary: plan.summary,
             preview: plan.preview.slice(0, 50)
         }), { headers: corsHeaders });

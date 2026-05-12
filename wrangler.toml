@@ -15,8 +15,7 @@ binding = "ASSETS"
 run_worker_first = ["/*"]
 
 [vars]
-CF_ACCOUNT_ID = "bb5582c4aed9457c0c431e8114588ccc"
-CONFIRMATION_PUBLIC_ORIGIN = "http://74.211.97.177/Exhibitors-confirmation"
+CONFIRMATION_PUBLIC_ORIGIN = "https://expo.chinafife.com/Exhibitors-confirmation"
 
 [[d1_databases]]
 binding = "DB"

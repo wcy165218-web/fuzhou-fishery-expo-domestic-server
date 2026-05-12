@@ -207,6 +207,9 @@ CREATE TABLE Expenses (
   applicant TEXT,
   reason TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  source TEXT NOT NULL DEFAULT 'MANUAL',
+  erp_record_id TEXT,
+  raw_payload TEXT,
   deleted_at TEXT,
   deleted_by TEXT
 );
@@ -444,6 +447,9 @@ CREATE INDEX idx_expenses_project_deleted_order
 
 CREATE INDEX idx_expenses_project_type_deleted
   ON Expenses (project_id, expense_type, deleted_at);
+
+CREATE UNIQUE INDEX idx_expenses_erp_record_id
+  ON Expenses (erp_record_id);
 
 CREATE INDEX idx_booths_project_hall_id
   ON Booths (project_id, hall, id);

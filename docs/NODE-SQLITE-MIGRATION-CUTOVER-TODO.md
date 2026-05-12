@@ -482,6 +482,25 @@ Cloudflare delta reconciliation: 2026-05-11 17:35 CST.
   - Cloudflare D1 `Orders.id=136`: present
   - contract file and `.meta.json` both present under `/var/expo-files`
 
+Production restore follow-up: 2026-05-11 22:18 CST.
+
+- After the production database was restored from `/var/backups/expo-server/20260511-173445/exhibition.sqlite`, the previously reconciled D1-only order `id=136` was missing again because that backup was taken before the import.
+- Took a fresh pre-write VPS backup:
+  - `/var/backups/expo-server/20260511-restore-order-136/manifest.txt`
+- Re-imported D1 `Orders.id=136` into the active VPS SQLite database.
+- Re-applied booth status sync for `project_id=1`, `booth_id=2L43`:
+  - `可售` -> `已预定`
+- Verification:
+  - VPS `PRAGMA integrity_check`: `ok`
+  - VPS `Orders=105`
+  - Cloudflare D1 `Orders=105`
+  - VPS `Orders.id=136`: present
+  - VPS `Booths(project_id=1,id=2L43).status=已预定`
+  - contract file sha256 remains `77a4101269de58989064049ad9b94284576f3820afbdd9f29e6f463935eee408`
+  - `GET https://expo.chinafife.com/`: `200`
+  - invalid login probe: `401`
+  - PM2 `expo-server`: `online`
+
 Remaining manual browser smoke:
 
 - Login with a migrated staff account.

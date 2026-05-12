@@ -2856,19 +2856,20 @@ window.loadPaymentHistory = async function(orderId, options = {}) {
             const safePayer = String(p.payer_name || '').replace(/'/g, "\\'");
             const safeBank = String(p.bank_name || '').replace(/'/g, "\\'");
             const safeRem = String(p.remarks || '').replace(/'/g, "\\'");
-            const isErpSync = p.source === 'ERP_SYNC';
+            const isErpSync = String(p.source || '').startsWith('ERP_SYNC');
+            const isErpRefund = p.source === 'ERP_SYNC_REFUND' || Number(p.amount || 0) < 0;
             let raw = null;
             if (isErpSync) {
                 try { raw = p.raw_payload ? JSON.parse(p.raw_payload) : null; } catch (e) { raw = null; }
             }
             const matchedAccount = window.findPaymentAccountOption(p.bank_name);
-            const accountCompany = raw?.accountCompany || raw?.account_company || window.currentFinanceOrder?.company_name || '';
-            const payerName = raw?.receivablesUnit || raw?.payerName || p.payer_name || '';
+            const accountCompany = raw?.accountCompany || raw?.account_company || raw?.company || window.currentFinanceOrder?.company_name || '';
+            const payerName = raw?.receivablesUnit || raw?.payerName || raw?.company || p.payer_name || '';
             const receiveBank = raw?.bank || raw?.bankName || raw?.bank_name || matchedAccount?.bank_name || p.bank_name || '';
             const receiveAccountName = raw?.corporateAccount || raw?.corporate_account || matchedAccount?.account_name || '';
             const receiveAccountNo = raw?.account || raw?.account_no || raw?.accountNo || matchedAccount?.account_no || '';
             const extraRemarkText = String(p.remarks || '').trim();
-            const remarkHtml = extraRemarkText && (!isErpSync || !extraRemarkText.startsWith('ERP同步导入：'))
+            const remarkHtml = extraRemarkText && (!isErpSync || (!extraRemarkText.startsWith('ERP同步导入：') && !extraRemarkText.startsWith('ERP退款同步导入：')))
                 ? `<div class="leading-5 text-slate-500">备注: ${window.escapeHtml(extraRemarkText)}</div>`
                 : '';
             const detailsHtml = `
@@ -2885,9 +2886,12 @@ window.loadPaymentHistory = async function(orderId, options = {}) {
                 ? `<span class="badge-readonly">ERP 同步只读</span>`
                 : `<div><button onclick="window.openEditPaymentModal('${p.id}', ${p.amount}, '${safePayer}', '${safeBank}', '${safeRem}', '${p.payment_time}')" class="btn-soft-primary px-3 py-1 text-xs mr-2">修改</button><button onclick="window.deletePayment('${p.id}')" class="btn-soft-danger px-3 py-1 text-xs">删除</button></div>`;
             const sourceBadge = isErpSync
-                ? '<span class="ml-2 badge-readonly">ERP同步</span>'
+                ? `<span class="ml-2 badge-readonly">${isErpRefund ? 'ERP退款' : 'ERP同步'}</span>`
                 : '';
-            return `<div class="bg-white border rounded p-3 flex justify-between items-start gap-4 hover:bg-gray-50 transition"><div class="min-w-0 flex-1"><div class="font-bold text-green-600 text-lg">到账 ¥${p.amount}${sourceBadge}</div>${detailsHtml}</div><div class="text-right flex shrink-0 flex-col items-end gap-2"><div class="text-xs font-bold text-gray-700 tabular-data">${window.escapeHtml(p.payment_time)}</div>${actionHtml}</div></div>`;
+            const amountText = window.formatCurrency(Math.abs(Number(p.amount || 0)), '¥');
+            const titleClass = isErpRefund ? 'text-rose-600' : 'text-green-600';
+            const titleText = isErpRefund ? `退款 ${amountText}` : `到账 ${amountText}`;
+            return `<div class="bg-white border rounded p-3 flex justify-between items-start gap-4 hover:bg-gray-50 transition"><div class="min-w-0 flex-1"><div class="font-bold ${titleClass} text-lg">${titleText}${sourceBadge}</div>${detailsHtml}</div><div class="text-right flex shrink-0 flex-col items-end gap-2"><div class="text-xs font-bold text-gray-700 tabular-data">${window.escapeHtml(p.payment_time)}</div>${actionHtml}</div></div>`;
         });
         const paginationHtml = state.total > state.pageSize
             ? `<div class="mt-3 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 text-xs text-slate-500">

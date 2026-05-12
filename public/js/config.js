@@ -619,11 +619,13 @@ window.renderErpSyncResult = function(payload, title = 'ERP 同步结果') {
 
     const summary = payload?.summary || {};
     const preview = Array.isArray(payload?.preview) ? payload.preview : [];
+    const paymentImportableCount = Number(summary.payment_importable_count || 0);
+    const refundImportableCount = Number(summary.refund_importable_count || 0);
     const lines = [
         `${title}`,
         '',
         `总返回记录：${summary.total_rows || 0}`,
-        `可同步：${summary.importable_count || 0}`,
+        `可同步：${summary.importable_count || 0}（收款 ${paymentImportableCount}，退款 ${refundImportableCount}）`,
         `已匹配订单：${summary.matched_count || 0}`,
         `已重复跳过：${summary.duplicate_count || 0}`,
         `非已认领状态：${summary.skipped_not_closed || 0}`,
@@ -637,8 +639,9 @@ window.renderErpSyncResult = function(payload, title = 'ERP 同步结果') {
     if (preview.length > 0) {
         lines.push('', '预览明细（最多显示前 50 条）：');
         preview.forEach((item, index) => {
+            const syncType = item.sync_type ? `${item.sync_type} ` : '';
             lines.push(
-                `${index + 1}. [${item.result}] ERP#${item.erp_id} | ${item.company_name} | ${item.project_name} | ${window.formatCurrency(item.amount || 0)} | ${item.reason}`
+                `${index + 1}. [${item.result}] ERP#${item.erp_id} | ${item.company_name} | ${item.project_name} | ${syncType}${window.formatCurrency(item.amount || 0)} | ${item.reason}`
             );
         });
     }
@@ -671,14 +674,20 @@ window.loadErpConfig = async function(options = {}) {
         document.getElementById('erp-endpoint-url').value = data.endpoint_url || '';
         document.getElementById('erp-water-id').value = data.water_id || '';
         document.getElementById('erp-expected-project').value = data.expected_project_name || '';
-        document.getElementById('erp-session-cookie').value = data.session_cookie || '';
+        const cookieInput = document.getElementById('erp-session-cookie');
+        cookieInput.value = '';
+        cookieInput.placeholder = data.has_session_cookie
+            ? '已保存 Cookie；留空将继续沿用，粘贴新 Cookie 可覆盖'
+            : '可直接粘贴 JSESSIONID=xxxx 或完整 Cookie';
         document.getElementById('erp-last-sync-at').innerText = data.last_sync_at || '未同步';
 
         let summaryText = '暂无记录';
         if (data.last_sync_summary) {
             try {
                 const parsed = JSON.parse(data.last_sync_summary);
-                summaryText = `上次同步 ${parsed.synced_count || 0} 条，可同步 ${parsed.summary?.importable_count || 0} 条`;
+                const paymentCount = Number(parsed.synced_payment_count || 0);
+                const refundCount = Number(parsed.synced_refund_count || 0);
+                summaryText = `上次同步 ${parsed.synced_count || 0} 条（收款 ${paymentCount}，退款 ${refundCount}），可同步 ${parsed.summary?.importable_count || 0} 条`;
             } catch (e) {
                 summaryText = data.last_sync_summary;
             }
@@ -747,7 +756,7 @@ window.previewErpSync = async function() {
 window.runErpSync = async function() {
     const pid = document.getElementById('global-project-select').value;
     if (!pid) return window.showToast('请先选择项目', 'error');
-    if (!confirm('确定要把 ERP 已认领收款正式同步入账吗？同步后会真实写入当前项目收款流水。')) return;
+    if (!confirm('确定要把 ERP 已认领收款/退款正式同步到当前项目吗？同步后会真实写入当前项目收款流水或退款支出。')) return;
 
     try {
         await window.withButtonLoading('btn-run-erp-sync', async () => {
@@ -760,8 +769,8 @@ window.runErpSync = async function() {
                 {}
             );
 
-            window.renderErpSyncResult(result, `ERP 正式同步完成，本次成功入账 ${result.synced_count || 0} 条`);
-            window.showToast(`ERP 同步完成，已入账 ${result.synced_count || 0} 条`);
+            window.renderErpSyncResult(result, `ERP 正式同步完成，本次成功同步 ${result.synced_count || 0} 条`);
+            window.showToast(`ERP 同步完成，已同步 ${result.synced_count || 0} 条`);
             window.invalidateProjectResourceCache('erpConfig', pid);
             await window.loadErpConfig({ force: true });
             if (document.getElementById('sec-order-list')?.classList.contains('active')) {

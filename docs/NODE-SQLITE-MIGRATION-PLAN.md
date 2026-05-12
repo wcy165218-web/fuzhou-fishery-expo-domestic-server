@@ -91,7 +91,7 @@ Cloudflare auth record - 2026-05-10 22:07 CST:
 
 - `HOME=$PWD/.wrangler-home wrangler login --callback-host 127.0.0.1`: succeeded.
 - `npm run cf:whoami`: logged in as `wcy165218@gmail.com`.
-- Account ID: `bb5582c4aed9457c0c431e8114588ccc`.
+- Account ID: recorded outside the repository deployment config.
 - Remote D1 table list query against `exhibition_db`: succeeded.
 - R2 bucket list query: succeeded; buckets include `expo-contracts` and `expo-confirmation-preview-assets`.
 - R2 S3 migration credentials were created on `2026-05-10 21:28 CST`:
@@ -635,7 +635,7 @@ Implemented:
 Required credentials for the real run:
 
 ```sh
-CF_ACCOUNT_ID=bb5582c4aed9457c0c431e8114588ccc
+CF_ACCOUNT_ID=<set outside the repo>
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 FILE_STORAGE_ROOT=/var/expo-files
