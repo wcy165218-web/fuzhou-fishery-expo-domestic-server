@@ -2,7 +2,7 @@ param(
     [string]$VpsHost = "8.136.49.187",
     [string]$VpsUser = "admin",
     [string]$KeyPath = "$env:USERPROFILE\.ssh\id_ed25519_expo_vps",
-    [string]$NasRoot = "Z:\ExpoBackups\fuzhou-fishery-expo",
+    [string]$NasRoot = "\\hyfairs-server\展览四部\内展部\渔博会\2026\展务\backup",
     [string]$RemoteEnvFile = "/opt/expo-server/.env.production",
     [string]$RemoteBackupRoot = "/var/backups/expo-server",
     [int]$RetentionDays = 90,
@@ -10,6 +10,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
 function New-DirectoryIfMissing {
     param([string]$Path)
@@ -18,17 +19,19 @@ function New-DirectoryIfMissing {
     }
 }
 
-New-DirectoryIfMissing -Path $NasRoot
-$LogRoot = Join-Path $NasRoot "_logs"
-New-DirectoryIfMissing -Path $LogRoot
-$RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$LogFile = Join-Path $LogRoot "pull-vps-backup-$RunStamp.log"
+$LocalLogRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ExpoBackupLogs"
+New-DirectoryIfMissing -Path $LocalLogRoot
+$LogFile = Join-Path $LocalLogRoot "pull-vps-backup-$RunStamp.log"
 
 function Write-BackupLog {
     param([string]$Message)
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
     Write-Host $line
-    Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+    try {
+        Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+    } catch {
+        Write-Host "[log write failed] $($_.Exception.Message)"
+    }
 }
 
 function Assert-CommandExists {
@@ -68,9 +71,19 @@ try {
     Write-BackupLog "VPS: $VpsUser@$VpsHost"
     Write-BackupLog "NAS root: $NasRoot"
     Write-BackupLog "SSH key: $KeyPath"
+    Write-BackupLog "Initial local log: $LogFile"
 
     Assert-CommandExists -Name "ssh"
     Assert-CommandExists -Name "scp"
+
+    Write-BackupLog "Step 0/4: Prepare NAS folder and NAS log."
+    New-DirectoryIfMissing -Path $NasRoot
+    $LogRoot = Join-Path $NasRoot "_logs"
+    New-DirectoryIfMissing -Path $LogRoot
+    $NasLogFile = Join-Path $LogRoot "pull-vps-backup-$RunStamp.log"
+    Copy-Item -LiteralPath $LogFile -Destination $NasLogFile -Force
+    $LogFile = $NasLogFile
+    Write-BackupLog "NAS log ready: $LogFile"
 
     if (-not (Test-Path -LiteralPath $KeyPath)) {
         throw "SSH key not found: $KeyPath"

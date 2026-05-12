@@ -37,10 +37,10 @@ Z:
 建议备份目录：
 
 ```text
-Z:\ExpoBackups\fuzhou-fishery-expo
+\\hyfairs-server\展览四部\内展部\渔博会\2026\展务\backup
 ```
 
-如果你的 NAS 不是 `Z:`，后面运行脚本时把路径改成你的实际盘符。
+当前脚本默认使用这个 NAS 路径。
 
 如果后面要用「任务计划程序」并勾选「不管用户是否登录都要运行」，更推荐使用 NAS 的 UNC 路径，而不是映射盘符。例如：
 
@@ -64,13 +64,21 @@ C:\Users\你的Windows用户名\.ssh\id_ed25519_expo_vps
 
 ### 3. 复制脚本到 Windows
 
-把这两个文件复制到 Windows 同一个文件夹里，例如：
+把这两个文件复制到 Windows 本机同一个文件夹里，例如：
 
 ```text
 C:\ExpoBackupTools\
   pull-vps-backup-to-windows-nas.ps1
   run-windows-nas-backup.cmd
 ```
+
+不要直接把脚本放在 NAS 目录里双击运行。Windows 的 `cmd.exe` 对 UNC 当前目录支持不好，可能会出现：
+
+```text
+UNC 路径不受支持。默认值设为 Windows 目录。
+```
+
+脚本可以把备份写到 NAS，但脚本本身建议放在 Windows 本机磁盘，例如 `C:\ExpoBackupTools\`。
 
 文件来自本仓库：
 
@@ -87,7 +95,7 @@ scripts\run-windows-nas-backup.cmd
 run-windows-nas-backup.cmd
 ```
 
-如果你的 NAS 不是 `Z:`，不要双击，改用 PowerShell 运行：
+如果要临时改 NAS 路径，不要双击，改用 PowerShell 运行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ExpoBackupTools\pull-vps-backup-to-windows-nas.ps1" -NasRoot "你的NAS盘符:\ExpoBackups\fuzhou-fishery-expo"
@@ -112,13 +120,13 @@ powershell.exe
 8. 添加参数填写：
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\ExpoBackupTools\pull-vps-backup-to-windows-nas.ps1" -NasRoot "Z:\ExpoBackups\fuzhou-fishery-expo"
+-NoProfile -ExecutionPolicy Bypass -File "C:\ExpoBackupTools\pull-vps-backup-to-windows-nas.ps1"
 ```
 
-如果任务计划程序要在用户未登录时运行，建议把 `Z:\...` 改成你的 NAS UNC 路径，例如：
+脚本默认已经使用：
 
 ```text
--NoProfile -ExecutionPolicy Bypass -File "C:\ExpoBackupTools\pull-vps-backup-to-windows-nas.ps1" -NasRoot "\\NAS名称\共享文件夹\ExpoBackups\fuzhou-fishery-expo"
+\\hyfairs-server\展览四部\内展部\渔博会\2026\展务\backup
 ```
 
 9. 完成后，右键这个任务，选择「属性」：
@@ -133,10 +141,16 @@ powershell.exe
 先看日志：
 
 ```text
-Z:\ExpoBackups\fuzhou-fishery-expo\_logs\
+\\hyfairs-server\展览四部\内展部\渔博会\2026\展务\backup\_logs\
 ```
 
 每次运行都会生成一个日志文件。
+
+如果 NAS 还没连上，脚本会先把临时日志写在 Windows 本机：
+
+```text
+%TEMP%\ExpoBackupLogs\
+```
 
 ### 2. 提示找不到 SSH key
 
