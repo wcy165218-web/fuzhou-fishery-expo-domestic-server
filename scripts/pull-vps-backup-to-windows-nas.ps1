@@ -2,7 +2,7 @@ param(
     [string]$VpsHost = "8.136.49.187",
     [string]$VpsUser = "admin",
     [string]$KeyPath = "$env:USERPROFILE\.ssh\id_ed25519_expo_vps",
-    [string]$NasRoot = "\\hyfairs-server\展览四部\内展部\渔博会\2026\展务\backup",
+    [string]$NasRoot = "",
     [string]$RemoteEnvFile = "/opt/expo-server/.env.production",
     [string]$RemoteBackupRoot = "/var/backups/expo-server",
     [int]$RetentionDays = 90,
@@ -11,6 +11,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+if ([string]::IsNullOrWhiteSpace($NasRoot)) {
+    $DefaultNasRootBase64Utf8 = "XFxoeWZhaXJzLXNlcnZlclzlsZXop4jlm5vpg6hc5YaF5bGV6YOoXOa4lOWNmuS8mlwyMDI2XOWxleWKoVxiYWNrdXA="
+    $NasRoot = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($DefaultNasRootBase64Utf8))
+}
 
 function New-DirectoryIfMissing {
     param([string]$Path)
