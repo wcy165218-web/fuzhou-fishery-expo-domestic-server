@@ -1,5 +1,5 @@
 // ================= js/app.js =================
-const LOGIN_MODULE_SRC = './js/auth.js?v=20260508-table-scroll-1';
+const LOGIN_MODULE_SRC = './js/auth.js?v=20260513-exhibitor-directory-export-1';
 let pendingLoginModuleLoad = null;
 
 function loadLoginModuleOnce() {

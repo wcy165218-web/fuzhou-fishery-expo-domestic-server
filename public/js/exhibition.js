@@ -2991,6 +2991,65 @@ window.viewExhibitorConfirmationOverview = async function(key) {
     }
 };
 
+window.exportExhibitorDirectoryExcel = async function() {
+    const rows = window.applyExhibitorDirectoryFilters();
+    if (!rows.length) {
+        window.showToast?.('当前没有可导出的参展商名单', 'error');
+        return;
+    }
+    try {
+        const XLSX = await window.ensureXLSXLoaded();
+        const headers = ['序号', '馆号', '展位号', '展务状态', '基本信息确认状态', '企业名', '面积(㎡)', '展位类型', '业务员姓名', '提交时间'];
+        const sheetRows = [headers];
+        rows.forEach((row, index) => {
+            sheetRows.push([
+                index + 1,
+                row.hall || '',
+                row.booth_code || '',
+                row.exhibition_status || '',
+                row.basic_info_status_label || '',
+                row.company_name || '',
+                Number(row.area || 0),
+                row.booth_type || '',
+                row.sales_name || '',
+                row.submitted_at || ''
+            ]);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+        const boothColIndex = headers.indexOf('展位号');
+        for (let rowIndex = 1; rowIndex < sheetRows.length; rowIndex += 1) {
+            const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: boothColIndex });
+            const value = sheetRows[rowIndex][boothColIndex];
+            worksheet[cellAddress] = {
+                t: 's',
+                v: value == null ? '' : String(value),
+                z: '@'
+            };
+        }
+        worksheet['!cols'] = [
+            { wch: 6 },
+            { wch: 10 },
+            { wch: 16 },
+            { wch: 18 },
+            { wch: 20 },
+            { wch: 34 },
+            { wch: 10 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 20 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, '筹展名单');
+        const fileName = `筹展管理名单-${window.getExhibitionProjectName()}-${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`;
+        XLSX.writeFile(workbook, fileName, { compression: true });
+        window.showToast?.(`已导出 ${rows.length} 条筹展名单`);
+    } catch (error) {
+        window.showToast?.(`导出失败: ${error.message || error}`, 'error');
+    }
+};
+
 window.exportExhibitorDirectory = async function() {
     const selectedSet = window.getSelectedExhibitorDirectoryKeySet();
     const selectedRows = (window.exhibitorDirectoryItems || []).filter((row) => selectedSet.has(`${Number(row.order_id || 0)}::${String(row.booth_code || '')}`));

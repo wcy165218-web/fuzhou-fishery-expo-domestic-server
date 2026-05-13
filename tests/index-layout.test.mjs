@@ -55,6 +55,7 @@ assert.ok(html.includes('id="refrigerator-company-manual-shell"'), 'refrigerator
 assert.ok(html.includes('这里才是真正可输入的搜索框'), 'refrigerator rental modal should clearly distinguish the search input area');
 assert.ok(html.includes('id="exhibition-manager-name"'), 'exhibition project settings should expose an exhibition manager name input');
 assert.ok(html.includes('id="exhibition-manager-list-tbody"'), 'exhibition project settings should expose an exhibition manager list');
+assert.ok(html.includes('id="btn-export-exhibitor-directory-list"'), 'exhibitor directory should expose an Excel list export button');
 assert.ok(html.includes('id="lintel-table-wrap"'), 'lintel panel should expose a lintel table container');
 assert.ok(html.includes('id="btn-lintel-batch-confirm"'), 'lintel panel should expose a batch confirm button');
 assert.ok(html.includes('id="btn-export-lintels"'), 'lintel panel should expose a lintel export button');
