@@ -46,6 +46,8 @@ window.boothMapEditor = window.boothMapEditor || {
     previewPointerStartClient: null,
     previewPointerStartViewBox: null,
     searchHighlightItemId: '',
+    previewSearchHighlightItemId: '',
+    previewSearchKeyword: '',
     previewFilterMode: 'status',
     previewStatusFilters: { available: true, reserved: true, deposit: true, full_paid: true, locked: true },
     previewTypeFilters: { '标摊': true, '豪标': true, '光地': true },
@@ -66,6 +68,8 @@ window.getBoothMapState = function() {
         : createDefaultBoothMapExhibitionFilters();
     const normalizedMode = String(state.previewFilterMode || '').trim();
     state.previewFilterMode = ['status', 'type', 'lintel'].includes(normalizedMode) ? normalizedMode : 'status';
+    state.previewSearchHighlightItemId = String(state.previewSearchHighlightItemId || '');
+    state.previewSearchKeyword = String(state.previewSearchKeyword || '');
     window.boothMapEditor = state;
     return state;
 }
@@ -568,6 +572,85 @@ window.fitBoothMapSingleLineBlock = function(text, fontSize, maxWidth, maxHeight
 window.getBoothMapRuntimeItem = function(boothCode) {
     const state = window.getBoothMapState();
     return state.runtimeByBoothCode[window.normalizeBoothCode(boothCode)] || null;
+}
+
+window.normalizeBoothMapPreviewSearchText = function(value) {
+    return String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+}
+
+window.getBoothMapPreviewSearchFields = function(item) {
+    const runtimeItem = window.getBoothMapRuntimeItem(item?.booth_code);
+    const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
+    const fields = [
+        item?.booth_code,
+        window.normalizeBoothCode(item?.booth_code),
+        runtimeItem?.booth_code,
+        runtimeItem?.booth_no_text,
+        runtimeItem?.company_text,
+        runtimeItem?.company_name,
+        runtimeItem?.customer_name
+    ];
+    orderSummaries.forEach((order) => {
+        fields.push(order?.company_name, order?.customer_name, order?.sales_name);
+    });
+    return fields
+        .map((field) => String(field || '').trim())
+        .filter(Boolean);
+}
+
+window.findBoothMapPreviewSearchMatch = function(keyword) {
+    const rawKeyword = String(keyword || '').trim();
+    const normalizedKeyword = window.normalizeBoothMapPreviewSearchText(rawKeyword);
+    if (!normalizedKeyword) return null;
+    const items = Array.isArray(currentBoothMapItems) ? currentBoothMapItems : [];
+    const boothKeyword = window.normalizeBoothCode(rawKeyword);
+    const exactBoothItem = items.find((item) => window.normalizeBoothCode(item?.booth_code) === boothKeyword);
+    if (exactBoothItem) {
+        return { item: exactBoothItem, matchedText: window.normalizeBoothCode(exactBoothItem.booth_code), matchType: 'booth' };
+    }
+    const exactCompanyItem = items.find((item) => {
+        return window.getBoothMapPreviewSearchFields(item).some((field) => (
+            window.normalizeBoothMapPreviewSearchText(field) === normalizedKeyword
+        ));
+    });
+    if (exactCompanyItem) {
+        return { item: exactCompanyItem, matchedText: rawKeyword, matchType: 'company' };
+    }
+    const fuzzyItem = items.find((item) => {
+        return window.getBoothMapPreviewSearchFields(item).some((field) => (
+            window.normalizeBoothMapPreviewSearchText(field).includes(normalizedKeyword)
+        ));
+    });
+    if (fuzzyItem) {
+        return { item: fuzzyItem, matchedText: rawKeyword, matchType: 'fuzzy' };
+    }
+    return null;
+}
+
+window.getBoothMapPreviewSearchResultText = function(item) {
+    if (!item) return '';
+    const runtimeItem = window.getBoothMapRuntimeItem(item.booth_code);
+    const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
+    const companyName = String(runtimeItem?.company_text || orderSummaries[0]?.company_name || '').trim();
+    const boothCode = window.normalizeBoothCode(item.booth_code);
+    return companyName ? `${boothCode}｜${companyName}` : boothCode;
+}
+
+window.updateBoothMapPreviewSearchResult = function(item = null, message = '') {
+    const resultEl = document.getElementById('booth-map-preview-search-result');
+    if (!resultEl) return;
+    if (message) {
+        resultEl.innerText = message;
+        resultEl.className = 'mt-2 text-xs font-bold text-slate-500';
+        return;
+    }
+    if (!item) {
+        resultEl.innerText = '可按展位号或订单企业名快速定位。';
+        resultEl.className = 'mt-2 text-xs font-bold text-slate-500';
+        return;
+    }
+    resultEl.innerText = `已定位：${window.getBoothMapPreviewSearchResultText(item)}`;
+    resultEl.className = 'mt-2 text-xs font-bold text-emerald-700';
 }
 
 window.createDefaultBoothMapLabelStyle = function(widthPx, heightPx) {
@@ -2038,6 +2121,11 @@ window.selectBoothMap = async function(mapId, options = {}) {
     state.resizeContext = null;
     state.dragMoved = false;
     state.removedPersistedCodes = [];
+    state.previewSearchHighlightItemId = '';
+    state.previewSearchKeyword = '';
+    const previewSearchInput = document.getElementById('booth-map-preview-search-input');
+    if (previewSearchInput) previewSearchInput.value = '';
+    window.updateBoothMapPreviewSearchResult();
     state.previewViewBox = {
         x: 0,
         y: 0,
@@ -2277,6 +2365,9 @@ window.toggleBoothMapPreviewLintelFilter = function(code, checked) {
 
 window.isBoothMapItemVisibleInPreview = function(item) {
     const state = window.getBoothMapState();
+    if (String(state.previewSearchHighlightItemId || '') && String(state.previewSearchHighlightItemId) === String(item?.id)) {
+        return true;
+    }
     if (state.previewFilterMode === 'type') {
         const boothType = String(item.booth_type || '').trim();
         return !!state.previewTypeFilters[boothType];
@@ -3075,6 +3166,40 @@ window.searchCurrentBoothMapItem = function() {
     window.showToast(`已定位到展位：${matchedItem.booth_code}`);
 }
 
+window.searchBoothMapPreviewItem = function() {
+    if (!currentBoothMap) return window.showToast('请先选择一个画布', 'error');
+    const state = window.getBoothMapState();
+    const inputEl = document.getElementById('booth-map-preview-search-input');
+    const keyword = String(inputEl?.value || '').trim();
+    if (!keyword) return window.showToast('请输入展位号或企业名', 'error');
+    const matched = window.findBoothMapPreviewSearchMatch(keyword);
+    if (!matched?.item) {
+        state.previewSearchHighlightItemId = '';
+        state.previewSearchKeyword = keyword;
+        window.updateBoothMapPreviewSearchResult(null, `未找到：${keyword}`);
+        window.renderCurrentBoothMap();
+        return window.showToast(`终版预览未找到：${keyword}`, 'error');
+    }
+    state.previewSearchHighlightItemId = String(matched.item.id);
+    state.previewSearchKeyword = keyword;
+    state.previewHoveredBoothCode = '';
+    window.hideBoothMapTooltip?.();
+    window.focusBoothMapViewBoxOnItem(matched.item, 'preview', { zoomToItem: true });
+    window.updateBoothMapPreviewSearchResult(matched.item);
+    window.renderCurrentBoothMap();
+    window.showToast(`已定位到：${window.getBoothMapPreviewSearchResultText(matched.item)}`);
+}
+
+window.clearBoothMapPreviewSearch = function() {
+    const state = window.getBoothMapState();
+    state.previewSearchHighlightItemId = '';
+    state.previewSearchKeyword = '';
+    const inputEl = document.getElementById('booth-map-preview-search-input');
+    if (inputEl) inputEl.value = '';
+    window.updateBoothMapPreviewSearchResult();
+    window.renderCurrentBoothMap();
+}
+
 window.getBoothMapLabelYOffsetFromEdge = function(anchorY, shortSide, baseAnchorY, rangeMultiplier = 0.42) {
     const travel = Math.max(shortSide * rangeMultiplier, 8);
     return Number(((Number(anchorY) - Number(baseAnchorY)) * travel).toFixed(2));
@@ -3454,19 +3579,25 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
     }
     const { widthPx, heightPx } = window.getBoothMapItemSizePx(item);
     const runtimeItem = window.getBoothMapRuntimeItem(item.booth_code);
-    const isSearchHighlighted = mode === 'editor' && String(state.searchHighlightItemId || '') === String(item.id);
+    const isSearchHighlighted = mode === 'editor'
+        ? String(state.searchHighlightItemId || '') === String(item.id)
+        : String(state.previewSearchHighlightItemId || '') === String(item.id);
     const previewColors = mode === 'preview' ? window.getBoothMapItemPreviewColors(item) : null;
     const fillColor = mode === 'preview'
         ? (previewColors.fillColor)
         : (isSearchHighlighted ? '#fca5a5' : '#e2e8f0');
     const isDirty = mode === 'editor' && !!item._dirty;
     const strokeColor = mode === 'preview'
-        ? (previewColors.strokeColor)
+        ? (isSearchHighlighted ? '#facc15' : previewColors.strokeColor)
         : (isSearchHighlighted ? '#b91c1c' : (isDirty ? '#dc2626' : '#0f172a'));
     const selected = window.isBoothMapItemSelected(item.id);
     const centerX = widthPx / 2;
     const centerY = heightPx / 2;
     const baseStrokeWidth = window.getBoothMapStrokeWidth();
+    const shouldEmphasizeStroke = mode === 'editor' ? (selected || isSearchHighlighted) : isSearchHighlighted;
+    const strokeDashArray = mode === 'editor' && isDirty
+        ? '10 6'
+        : (mode === 'preview' && isSearchHighlighted ? '8 5' : '0');
     const localPoints = window.getBoothMapLocalPoints(item, widthPx, heightPx);
     const pointsMarkup = window.getBoothMapPointsMarkup(localPoints);
     const clipPathId = `booth-map-clip-${mode}-${String(item.id || item.booth_code || 'item').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -3484,8 +3615,8 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
                 fill="${fillColor}"
                 fill-opacity="0.82"
                 stroke="${strokeColor}"
-                stroke-width="${mode === 'editor' && (selected || isSearchHighlighted) ? Math.max(baseStrokeWidth + 1.4, 3.4) : baseStrokeWidth}"
-                stroke-dasharray="${mode === 'editor' && isDirty ? '10 6' : '0'}"
+                stroke-width="${shouldEmphasizeStroke ? Math.max(baseStrokeWidth + 1.4, 3.4) : baseStrokeWidth}"
+                stroke-dasharray="${strokeDashArray}"
             ></rect>
         `
         : `
@@ -3494,8 +3625,8 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
                 fill="${fillColor}"
                 fill-opacity="0.82"
                 stroke="${strokeColor}"
-                stroke-width="${mode === 'editor' && (selected || isSearchHighlighted) ? Math.max(baseStrokeWidth + 1.4, 3.4) : baseStrokeWidth}"
-                stroke-dasharray="${mode === 'editor' && isDirty ? '10 6' : '0'}"
+                stroke-width="${shouldEmphasizeStroke ? Math.max(baseStrokeWidth + 1.4, 3.4) : baseStrokeWidth}"
+                stroke-dasharray="${strokeDashArray}"
                 stroke-linejoin="round"
             ></polygon>
         `;
