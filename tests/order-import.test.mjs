@@ -135,6 +135,20 @@ async function testPlanAcceptsNewChineseProfileHeader() {
     assert.equal(plan.importRows[0].profile, '专注深海水产与冷链产品');
 }
 
+async function testPlanAcceptsExternalCollectionHeaders() {
+    const env = createBaseEnv();
+    const csvText = [
+        '业务员（订单归属，必须与系统账号一致）,参展企业全称,统一社会信用代码,是否无代码,联系人,联系电话,所在地区,产品分类,主营业务/详细展品,企业简介或产品亮点（300字以内）,招展渠道（直招/代理商招展）,代理商公司名称（代理商招展时填写）,展位号（多展位用逗号隔开）,是否联合参展,联合参展分配面积,展位图简称,最终成交展位费,其他应收合计,是否无展位订单,订单录入时间,优惠说明,合同附件地址',
+        '张三,示例海洋科技,91350100MA12345678,否,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,专注深海水产与冷链产品,直招,,1A01,否,,海洋科技,5000,0,否,2026-03-01 10:00:00,,'
+    ].join('\n');
+
+    const plan = await buildOrderImportPlan(env, 7, csvText);
+    assert.equal(plan.summary.error_count, 0);
+    assert.equal(plan.summary.success_count, 1);
+    assert.equal(plan.importRows[0].company_name, '示例海洋科技');
+    assert.equal(plan.importRows[0].distributed_booths[0].total_amount, 5000);
+}
+
 async function testPlanRejectsLongProfile() {
     const env = createBaseEnv();
     const longProfile = '亮'.repeat(301);
@@ -255,6 +269,7 @@ await testPlanRejectsMissingRequiredField();
 await testPlanMapsSalespersonAndBoothSuccessfully();
 await testPlanAcceptsAnnotatedTemplateHeaders();
 await testPlanAcceptsNewChineseProfileHeader();
+await testPlanAcceptsExternalCollectionHeaders();
 await testPlanRejectsLongProfile();
 await testExecuteOrderImportWritesOrders();
 await testPlanWarnsButAllowsExistingCompanyName();

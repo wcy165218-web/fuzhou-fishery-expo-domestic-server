@@ -32,6 +32,7 @@ const HEADER_ALIAS_MAP = {
     no_code_checked: 'no_code_checked',
     无代码: 'no_code_checked',
     特殊无代码: 'no_code_checked',
+    是否无代码: 'no_code_checked',
     contact_person: 'contact_person',
     联系人: 'contact_person',
     phone: 'phone',
@@ -43,12 +44,14 @@ const HEADER_ALIAS_MAP = {
     main_business: 'main_business',
     主营业务: 'main_business',
     详细展品: 'main_business',
+    '主营业务/详细展品': 'main_business',
     profile: 'profile',
     企业简介: 'profile',
     企业简介或产品亮点: 'profile',
     is_agent: 'is_agent',
     招展渠道分类: 'is_agent',
     渠道分类: 'is_agent',
+    招展渠道: 'is_agent',
     agent_name: 'agent_name',
     代理商公司名称: 'agent_name',
     total_booth_fee: 'total_booth_fee',
@@ -56,6 +59,7 @@ const HEADER_ALIAS_MAP = {
     actual_booth_fee: 'total_booth_fee',
     other_income: 'other_income',
     其他应收: 'other_income',
+    其他应收合计: 'other_income',
     fees_json: 'fees_json',
     其他费用json: 'fees_json',
     其他费用JSON: 'fees_json',
@@ -71,6 +75,7 @@ const HEADER_ALIAS_MAP = {
     光地显示名称: 'ground_booth_display_name',
     area: 'area',
     面积: 'area',
+    联合参展分配面积: 'area',
     price_unit: 'price_unit',
     计价单位: 'price_unit',
     unit_price: 'unit_price',
@@ -92,10 +97,12 @@ const HEADER_ALIAS_MAP = {
     状态: 'status',
     created_at: 'created_at',
     录入时间: 'created_at',
+    订单录入时间: 'created_at',
     discount_reason: 'discount_reason',
     优惠说明: 'discount_reason',
     contract_url: 'contract_url',
-    合同附件地址: 'contract_url'
+    合同附件地址: 'contract_url',
+    是否无展位订单: 'no_booth_order'
 };
 
 function chunkItems(items = [], chunkSize = SQL_IN_CHUNK_SIZE) {
@@ -419,12 +426,15 @@ function normalizeBoothInputs(rawItems, boothMap, rowObject) {
         const boothId = normalizeBoothCode(item?.booth_id || rowObject.booth_id);
         const booth = boothMap.get(boothId) || null;
         const type = safeTrim(item?.type || item?.booth_type || rowObject.booth_type || booth?.type);
-        const areaInput = toNonNegativeNumber(item?.area ?? rowObject.area);
+        const rawAreaValue = item?.area ?? rowObject.area;
+        const areaInput = safeTrim(rawAreaValue) ? toNonNegativeNumber(rawAreaValue) : NaN;
         const area = Number.isFinite(areaInput) ? areaInput : Number(booth?.area || 0);
-        const unitPriceInput = toNonNegativeNumber(item?.unit_price ?? rowObject.unit_price);
+        const rawUnitPriceValue = item?.unit_price ?? rowObject.unit_price;
+        const unitPriceInput = safeTrim(rawUnitPriceValue) ? toNonNegativeNumber(rawUnitPriceValue) : NaN;
         const unitPrice = Number.isFinite(unitPriceInput) ? unitPriceInput : Number(booth?.base_price || 0);
         const priceUnit = safeTrim(item?.price_unit || rowObject.price_unit || booth?.price_unit || (type === '光地' ? '平米' : '个'));
-        const standardFeeInput = toNonNegativeNumber(item?.standard_fee ?? rowObject.standard_fee);
+        const rawStandardFeeValue = item?.standard_fee ?? rowObject.standard_fee;
+        const standardFeeInput = safeTrim(rawStandardFeeValue) ? toNonNegativeNumber(rawStandardFeeValue) : NaN;
         const standardFee = Number.isFinite(standardFeeInput) ? standardFeeInput : calculateStandardFee(type, unitPrice, area);
         const isJoint = normalizeBoolean(item?.is_joint ?? rowObject.is_joint, { allowBlank: true });
         return {
