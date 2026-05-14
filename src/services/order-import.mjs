@@ -11,7 +11,7 @@ import {
     toNonNegativeNumber,
     validateStandardBoothDisplayName
 } from '../utils/helpers.mjs';
-import { normalizeBoothCode } from '../utils/booth-map.mjs';
+import { normalizeBoothCode, splitBoothCodeList } from '../utils/booth-map.mjs';
 
 const SQL_IN_CHUNK_SIZE = 80;
 const BATCH_CHUNK_SIZE = 40;
@@ -83,6 +83,7 @@ const HEADER_ALIAS_MAP = {
     馆号: 'hall',
     is_joint: 'is_joint',
     联合参展: 'is_joint',
+    是否联合参展: 'is_joint',
     no_booth_order: 'no_booth_order',
     无展位订单: 'no_booth_order',
     selected_booths_json: 'selected_booths_json',
@@ -350,6 +351,34 @@ async function loadActiveOrdersMap(env, projectId, boothIds = []) {
     return activeOrderMap;
 }
 
+function normalizeCompanyNameForMatch(value) {
+    return safeTrim(value).toLowerCase();
+}
+
+async function loadExistingCompanyNameSet(env, projectId, companyNames = []) {
+    const normalizedCompanyNames = Array.from(new Set(
+        (Array.isArray(companyNames) ? companyNames : [])
+            .map((companyName) => normalizeCompanyNameForMatch(companyName))
+            .filter(Boolean)
+    ));
+    const companyNameSet = new Set();
+    for (const companyNameChunk of chunkItems(normalizedCompanyNames)) {
+        const placeholders = companyNameChunk.map(() => '?').join(',');
+        const rows = ((await env.DB.prepare(`
+            SELECT company_name
+            FROM Orders
+            WHERE project_id = ?
+              AND deleted_at IS NULL
+              AND LOWER(TRIM(company_name)) IN (${placeholders})
+        `).bind(Number(projectId), ...companyNameChunk).all()).results || []);
+        rows.forEach((row) => {
+            const normalizedCompanyName = normalizeCompanyNameForMatch(row.company_name);
+            if (normalizedCompanyName) companyNameSet.add(normalizedCompanyName);
+        });
+    }
+    return companyNameSet;
+}
+
 function buildSettingsMap(settings = []) {
     return Object.fromEntries((Array.isArray(settings) ? settings : []).map((item) => [String(item.key), item]));
 }
@@ -371,9 +400,9 @@ function collectBoothInputs(rowObject) {
         if (!Array.isArray(parsed)) throw new Error('selected_booths_json 必须是数组');
         return parsed;
     }
-    const boothId = normalizeBoothCode(rowObject.booth_id);
-    if (!boothId) return [];
-    return [{
+    const boothIds = splitBoothCodeList(rowObject.booth_id);
+    if (boothIds.length === 0) return [];
+    return boothIds.map((boothId) => ({
         booth_id: boothId,
         hall: safeTrim(rowObject.hall),
         type: safeTrim(rowObject.booth_type),
@@ -382,7 +411,7 @@ function collectBoothInputs(rowObject) {
         unit_price: rowObject.unit_price,
         standard_fee: rowObject.standard_fee,
         is_joint: rowObject.is_joint
-    }];
+    }));
 }
 
 function normalizeBoothInputs(rawItems, boothMap, rowObject) {
@@ -463,7 +492,7 @@ function distributeBoothAmounts(selectedBooths, totalBoothFee, feeItems, paidAmo
     });
 }
 
-function createPreviewRow({ rowNumber, companyName, salesName, boothIds, totalAmount, status, result, reason }) {
+function createPreviewRow({ rowNumber, companyName, salesName, boothIds, totalAmount, status, result, reason, warnings = [] }) {
     return {
         row_number: rowNumber,
         company_name: companyName,
@@ -472,7 +501,8 @@ function createPreviewRow({ rowNumber, companyName, salesName, boothIds, totalAm
         total_amount: totalAmount,
         status,
         result,
-        reason
+        reason,
+        warnings
     };
 }
 
@@ -495,6 +525,17 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
 
     const settingsMap = buildSettingsMap(await getOrderFieldSettings(env, normalizedProjectId));
     const staffNameSet = await loadStaffNameSet(env);
+    const rowCompanyNameCounts = new Map();
+    rowObjects.forEach((rowEntry) => {
+        const normalizedCompanyName = normalizeCompanyNameForMatch(rowEntry.rowObject?.company_name);
+        if (!normalizedCompanyName) return;
+        rowCompanyNameCounts.set(normalizedCompanyName, (rowCompanyNameCounts.get(normalizedCompanyName) || 0) + 1);
+    });
+    const existingCompanyNameSet = await loadExistingCompanyNameSet(
+        env,
+        normalizedProjectId,
+        rowObjects.map((rowEntry) => rowEntry.rowObject?.company_name)
+    );
 
     const allBoothIds = [];
     const preliminaryRows = [];
@@ -530,10 +571,12 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
     const boothIdsToLock = new Set();
     let successCount = 0;
     let errorCount = 0;
+    let warningCount = 0;
 
     for (const rowEntry of preliminaryRows) {
         const { rowNumber, rowObject, rawBoothInputs, boothInputError } = rowEntry;
         const errors = [];
+        const warnings = [];
         if (boothInputError) {
             errors.push(boothInputError);
         }
@@ -542,6 +585,7 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
         const noCodeChecked = normalizeBoolean(rowObject.no_code_checked, { allowBlank: true }) === 1 ? 1 : 0;
         const agentFlag = normalizeAgentFlag(rowObject.is_agent);
         const noBoothOrder = normalizeBoolean(rowObject.no_booth_order, { allowBlank: true }) === 1 ? 1 : 0;
+        const rawPaidAmount = safeTrim(rowObject.paid_amount);
         const paidAmount = parseNumeric(rowObject.paid_amount, 0);
         const totalBoothFee = parseNumeric(rowObject.total_booth_fee, 0);
         const normalizedStatus = normalizeStatus(rowObject.status);
@@ -560,9 +604,18 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
         if (!salesName) errors.push('业务员不能为空');
         if (salesName && !staffNameSet.has(salesName)) errors.push('业务员不存在，请先在系统配置里创建账号');
         if (!companyName) errors.push('参展企业全称不能为空');
+        const normalizedCompanyName = normalizeCompanyNameForMatch(companyName);
+        if (normalizedCompanyName && existingCompanyNameSet.has(normalizedCompanyName)) {
+            warnings.push('参展企业全称已存在于当前项目，请确认不是重复导入');
+        }
+        if (normalizedCompanyName && Number(rowCompanyNameCounts.get(normalizedCompanyName) || 0) > 1) {
+            warnings.push('参展企业全称在本次导入文件中重复，请确认多展位是否应合并在同一行');
+        }
         if (agentFlag === null) errors.push('请填写招展渠道分类（直招 / 代理商招展）');
         if (!normalizedStatus) errors.push('状态仅支持 正常 / 已退订 / 已作废');
-        if (!Number.isFinite(paidAmount) || paidAmount < 0) errors.push('已收金额必须是非负数');
+        if (rawPaidAmount && (!Number.isFinite(paidAmount) || paidAmount !== 0)) {
+            warnings.push('已收金额本期不通过订单导入入账，本行将按已收 0 导入，请后续通过 ERP 同步或手工收款处理');
+        }
         if (!Number.isFinite(totalBoothFee) || totalBoothFee < 0) errors.push('最终成交展位费必须是非负数');
 
         if (isFieldRequired(settingsMap, 'credit_code') && !noCodeChecked && !safeTrim(rowObject.credit_code)) {
@@ -605,6 +658,12 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
         if (!noBoothOrder && selectedBooths.length > MAX_SELECTED_BOOTHS) {
             errors.push(`单行最多导入 ${MAX_SELECTED_BOOTHS} 个展位`);
         }
+        if (!noBoothOrder && selectedBooths.length > 0) {
+            const totalSelectedArea = selectedBooths.reduce((sum, item) => sum + Number(item.area || 0), 0);
+            if (totalSelectedArea <= 0 && Number(totalBoothFee || 0) !== 0) {
+                errors.push('0面积联合参展的最终成交展位费必须为 0');
+            }
+        }
 
         const hasStandardTypeBooth = selectedBooths.some((item) => ['标摊', '豪标'].includes(safeTrim(item.type)));
         const standardDisplayName = safeTrim(rowObject.standard_booth_display_name || rowObject.booth_display_name);
@@ -642,7 +701,7 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
         }
 
         const distributedBooths = errors.length === 0
-            ? distributeBoothAmounts(selectedBooths, Number(totalBoothFee || 0), feeItems, Number(paidAmount || 0))
+            ? distributeBoothAmounts(selectedBooths, Number(totalBoothFee || 0), feeItems, 0)
             : [];
 
         if (errors.length === 0 && normalizedStatus === '正常' && !noBoothOrder) {
@@ -655,7 +714,15 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
                 const activeEntries = runtimeBoothState.get(boothId) || [];
                 const existingEntry = activeEntries[0] || null;
                 if (existingEntry && !boothItem.is_joint) {
-                    errors.push(`展位 ${boothId} 已被占用`);
+                    errors.push(`展位 ${boothId} 已被占用；如确认为联合参展，请填写 联合参展=是，并填写分配面积`);
+                    return;
+                }
+                if (!existingEntry && boothItem.is_joint) {
+                    errors.push(`展位 ${boothId} 当前未被占用，不需要标记联合参展，请确认是否填错展位号`);
+                    return;
+                }
+                if (existingEntry && boothItem.is_joint && boothItem.area > Number(existingEntry.area || existingEntry.boothItemRef?.area || 0)) {
+                    errors.push(`展位 ${boothId} 联合参展分配面积不能大于当前可分摊面积`);
                     return;
                 }
                 if (existingEntry && boothItem.is_joint && boothItem.area > 0) {
@@ -697,6 +764,7 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
             ? roundTo(distributedBooths.reduce((sum, item) => sum + Number(item.total_amount || 0), 0), 2)
             : roundTo(Number(totalBoothFee || 0) + Number(totalOtherIncome || 0), 2);
         const boothIds = selectedBooths.map((item) => item.booth_id).filter(Boolean);
+        if (warnings.length > 0) warningCount += 1;
 
         if (errors.length > 0) {
             errorCount += 1;
@@ -708,7 +776,8 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
                 totalAmount,
                 status: normalizedStatus || safeTrim(rowObject.status) || '未识别',
                 result: 'error',
-                reason: errors.join('；')
+                reason: errors.join('；'),
+                warnings
             }));
             continue;
         }
@@ -721,8 +790,9 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
             boothIds,
             totalAmount,
             status: normalizedStatus,
-            result: 'ok',
-            reason: normalizedStatus === '正常' ? '可导入' : '可导入（历史状态订单）'
+            result: warnings.length > 0 ? 'warning' : 'ok',
+            reason: normalizedStatus === '正常' ? '可导入' : '可导入（历史状态订单）',
+            warnings
         }));
 
         importRows.push({
@@ -761,6 +831,7 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
             total_rows: rowObjects.length,
             success_count: successCount,
             error_count: errorCount,
+            warning_count: warningCount,
             max_rows_per_import: MAX_IMPORT_ROWS
         },
         preview: preview.slice(0, PREVIEW_LIMIT),

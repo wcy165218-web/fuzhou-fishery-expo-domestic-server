@@ -873,6 +873,9 @@ window.renderOrderList = function() {
     if (batchBtn) {
         batchBtn.style.display = window.isSuperAdmin?.() ? 'inline-flex' : 'none';
     }
+    document.querySelectorAll?.('[data-superadmin-order-import-action]').forEach((element) => {
+        element.classList.toggle('hidden', !window.isSuperAdmin?.());
+    });
 
     document.getElementById('order-total-stats').innerText = `共 ${Number(state.total || 0)} 笔`;
     const tbody = document.getElementById('order-list-tbody');

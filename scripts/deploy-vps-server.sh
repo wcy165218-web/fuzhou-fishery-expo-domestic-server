@@ -35,6 +35,8 @@ VPS_REMOTE_ENV_FILE=${VPS_REMOTE_ENV_FILE:-$VPS_SERVER_PATH/.env.production}
 VPS_INSTALL_PM2=${VPS_INSTALL_PM2:-1}
 VPS_PM2_SAVE=${VPS_PM2_SAVE:-1}
 VPS_PREDEPLOY_BACKUP=${VPS_PREDEPLOY_BACKUP:-1}
+LOCAL_GIT_REVISION=${LOCAL_GIT_REVISION:-$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}
+LOCAL_GIT_BRANCH=${LOCAL_GIT_BRANCH:-$(git -C "$PROJECT_ROOT" branch --show-current 2>/dev/null || echo unknown)}
 
 if ! command -v ssh >/dev/null 2>&1; then
   echo "ssh is required for VPS server deployment" >&2
@@ -193,6 +195,22 @@ fi
 REMOTE
 }
 
+remote_revision_command() {
+  local server_path=$(remote_quote "$REMOTE_SERVER_PATH")
+  local revision=$(remote_quote "$LOCAL_GIT_REVISION")
+  local branch=$(remote_quote "$LOCAL_GIT_BRANCH")
+
+  cat <<REMOTE
+set -euo pipefail
+cd ${server_path}
+{
+  echo "revision=${revision}"
+  echo "branch=${branch}"
+  echo "deployed_at=\$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+} > REVISION
+REMOTE
+}
+
 remote_predeploy_guard_command() {
   local server_path=$(remote_quote "$REMOTE_SERVER_PATH")
   local env_file=$(remote_quote "$REMOTE_ENV_FILE")
@@ -264,6 +282,23 @@ check_target() {
   echo "[deploy:vps:server] check done for ${target_id}"
 }
 
+show_revision_for_target() {
+  local target_id=$1
+  build_target_config "$target_id"
+  local server_path=$(remote_quote "$REMOTE_SERVER_PATH")
+  echo "[deploy:vps:server] target(${target_id}): ${REMOTE_TARGET}:${REMOTE_SERVER_PATH}"
+  "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s" <<REMOTE
+set -euo pipefail
+server_path=${server_path}
+if [[ -f "\$server_path/REVISION" ]]; then
+  cat "\$server_path/REVISION"
+else
+  echo "REVISION file not found"
+  exit 2
+fi
+REMOTE
+}
+
 deploy_target() {
   local target_id=$1
   build_target_config "$target_id"
@@ -293,6 +328,8 @@ deploy_target() {
 
   echo "[deploy:vps:server] installing dependencies and reloading PM2"
   remote_release_command | "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s"
+  echo "[deploy:vps:server] writing deployed revision"
+  remote_revision_command | "${SSH_CMD[@]}" "$REMOTE_TARGET" "bash -s"
   echo "[deploy:vps:server] done for ${target_id}"
 }
 
@@ -310,8 +347,16 @@ if [[ "$DEPLOY_ACTION" == "check" ]]; then
   exit 0
 fi
 
+if [[ "$DEPLOY_ACTION" == "revision" ]]; then
+  print_config
+  for target_id in "${DEPLOY_TARGET_LIST[@]}"; do
+    show_revision_for_target "$target_id"
+  done
+  exit 0
+fi
+
 if [[ "$DEPLOY_ACTION" != "deploy" ]]; then
-  echo "usage: zsh ./scripts/deploy-vps-server.sh [check|deploy]" >&2
+  echo "usage: zsh ./scripts/deploy-vps-server.sh [check|deploy|revision]" >&2
   exit 1
 fi
 

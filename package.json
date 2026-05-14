@@ -52,6 +52,10 @@
     "deploy:vps:static": "zsh ./scripts/deploy-vps-static.sh deploy",
     "deploy:vps:server:check": "zsh ./scripts/deploy-vps-server.sh check",
     "deploy:vps:server": "zsh ./scripts/deploy-vps-server.sh deploy",
+    "deploy:vps:server:revision": "zsh ./scripts/deploy-vps-server.sh revision",
+    "release:domestic:check": "zsh ./scripts/release-domestic-server.sh check",
+    "release:domestic:deploy": "zsh ./scripts/release-domestic-server.sh deploy",
+    "release:domestic:verify": "zsh ./scripts/release-domestic-server.sh verify",
     "backup:sqlite": "bash ./scripts/backup-sqlite.sh",
     "migrate:r2:local": "node scripts/migrate-r2-to-local.mjs"
   },

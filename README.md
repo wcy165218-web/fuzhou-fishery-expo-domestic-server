@@ -82,6 +82,9 @@ npm run deploy:cf         # 仅发布 Worker
 npm run deploy:vps:check  # 检查 VPS 静态与 Node 服务发布配置
 npm run deploy:vps:static # 仅同步静态资源到 VPS
 npm run deploy:vps:server # 同步 Node 服务并重载 PM2
+npm run deploy:vps:server:revision # 读取服务器当前部署 commit
+npm run release:domestic:check  # 国内服务器上线前检查
+npm run release:domestic:deploy # 国内服务器固定流程上线
 npm run backup:sqlite     # 在 Node/SQLite 服务器上备份数据库和文件存储
 npm run deploy            # Worker + VPS 静态资源一起发布
 ```
@@ -107,6 +110,8 @@ VPS_TARGET_ALIYUN_PM2_APP_NAME=expo-server
 ```
 
 静态脚本会逐台检查和同步，并拒绝同步到 `/var/www/` 之外的远端路径；远端没有 `rsync` 时会自动改用 tar 流同步。服务端脚本会先校验远端 SQLite 路径处于受保护目录并执行部署前备份，再同步 Node 文件、运行 `npm ci --omit=dev`，并通过 PM2 启动或重载 `expo-server`。
+
+国内服务器生产发布请优先使用 [docs/DOMESTIC-SERVER-RELEASE-WORKFLOW.md](docs/DOMESTIC-SERVER-RELEASE-WORKFLOW.md) 中的固定流程。`npm run release:domestic:deploy` 会先完成分支、工作区、测试和 GitHub 同步检查，再部署静态资源和服务端代码，并在服务器 `/opt/expo-server/REVISION` 写入本次部署 commit。
 
 ## 部署与配置
 
