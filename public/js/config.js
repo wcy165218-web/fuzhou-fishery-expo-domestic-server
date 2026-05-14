@@ -1,6 +1,8 @@
 // ================= js/config.js =================
 window.currentConfigPanel = window.currentConfigPanel || 'basic';
 window.currentOrderImportCsvText = window.currentOrderImportCsvText || '';
+window.currentOrderImportContext = window.currentOrderImportContext || 'config';
+window.orderImportCsvTextByContext = window.orderImportCsvTextByContext || { config: window.currentOrderImportCsvText || '', finance: '' };
 window.orderFieldDefinitions = [
     { key: 'is_agent', label: '招展渠道分类', desc: '控制直招/代理商招展切换，核心字段，始终显示。', immutable: true },
     { key: 'agent_name', label: '代理商公司名称', desc: '仅当选择“代理商招展”时显示输入框。' },
@@ -30,7 +32,8 @@ window.orderImportTemplateColumns = [
     { key: 'profile', header: 'profile（企业简介或产品亮点，是否必填跟随系统设置，300字以内）' },
     { key: 'is_agent', header: 'is_agent（招展渠道，填 直招/代理商招展 或 0/1）' },
     { key: 'agent_name', header: 'agent_name（代理商名称；仅代理商招展时使用）' },
-    { key: 'booth_id', header: 'booth_id（展位号；多展位可用英文逗号分隔）' },
+    { key: 'booth_id', header: 'booth_id（展位号；多展位可用英文逗号/顿号/分号分隔）' },
+    { key: 'is_joint', header: 'is_joint（是否联合参展，填 是/否；复用已占用展位时必须填 是）' },
     { key: 'booth_display_name', header: 'booth_display_name（展位图简称，可留空）' },
     { key: 'area', header: 'area（面积，单位平方米）' },
     { key: 'price_unit', header: 'price_unit（计价单位，如 个/平米）' },
@@ -38,7 +41,6 @@ window.orderImportTemplateColumns = [
     { key: 'total_booth_fee', header: 'total_booth_fee（最终成交展位费，必填）' },
     { key: 'other_income', header: 'other_income（其他应收，没有填 0）' },
     { key: 'fees_json', header: 'fees_json（其他费用 JSON，没有填 []）' },
-    { key: 'paid_amount', header: 'paid_amount（已收金额，建议填写）' },
     { key: 'status', header: 'status（订单状态，填 正常/已退订/已作废）' },
     { key: 'created_at', header: 'created_at（录入时间，格式 YYYY-MM-DD HH:mm:ss）' },
     { key: 'discount_reason', header: 'discount_reason（优惠说明，可留空）' },
@@ -47,6 +49,31 @@ window.orderImportTemplateColumns = [
     { key: 'selected_booths_json', header: 'selected_booths_json（多展位 JSON，没有填空）' }
 ];
 window.orderImportTemplateHeaders = window.orderImportTemplateColumns.map((column) => column.header);
+
+window.setOrderImportContext = function(context = 'config') {
+    const normalizedContext = context === 'finance' ? 'finance' : 'config';
+    window.currentOrderImportContext = normalizedContext;
+    window.orderImportCsvTextByContext = window.orderImportCsvTextByContext || { config: '', finance: '' };
+    return normalizedContext;
+};
+
+window.getOrderImportElement = function(baseId, context = window.currentOrderImportContext || 'config') {
+    const normalizedContext = context === 'finance' ? 'finance' : 'config';
+    return document.getElementById(normalizedContext === 'finance' ? `${baseId}-finance` : baseId);
+};
+
+window.getOrderImportCsvText = function(context = window.currentOrderImportContext || 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
+    return window.orderImportCsvTextByContext?.[normalizedContext] || '';
+};
+
+window.setOrderImportCsvText = function(value, context = window.currentOrderImportContext || 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
+    window.orderImportCsvTextByContext[normalizedContext] = String(value || '');
+    if (normalizedContext === 'config') {
+        window.currentOrderImportCsvText = window.orderImportCsvTextByContext[normalizedContext];
+    }
+};
 
 window.renderConfigSubnav = function() {
     ['basic', 'staff', 'order-fields', 'order-import'].forEach((panelKey) => {
@@ -997,13 +1024,28 @@ window.saveOrderFieldSettings = async function() {
     }
 };
 
-window.loadOrderImportPanel = function() {
+window.loadOrderImportPanel = function(context = 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
     const projectSelect = document.getElementById('global-project-select');
     const projectName = projectSelect?.selectedOptions?.[0]?.textContent?.trim() || '当前项目';
-    const label = document.getElementById('order-import-project-label');
+    const label = window.getOrderImportElement('order-import-project-label', normalizedContext);
     if (label) {
-        label.innerText = `${projectName} · 历史订单导入`;
+        label.innerText = `${projectName} · 订单导入`;
     }
+};
+
+window.openFinanceOrderImportPanel = function() {
+    if (!window.isSuperAdmin?.()) return window.showToast('仅超级管理员可导入订单', 'error');
+    window.setOrderImportContext('finance');
+    const panel = document.getElementById('order-import-inline-panel');
+    if (panel) panel.classList.remove('hidden');
+    window.loadOrderImportPanel('finance');
+};
+
+window.closeFinanceOrderImportPanel = function() {
+    const panel = document.getElementById('order-import-inline-panel');
+    if (panel) panel.classList.add('hidden');
+    window.hideOrderImportResult('finance');
 };
 
 window.escapeCsvCell = function(value) {
@@ -1029,6 +1071,7 @@ window.buildOrderImportTemplateCsv = function() {
         is_agent: '直招',
         agent_name: '',
         booth_id: '1A01',
+        is_joint: '否',
         booth_display_name: '海洋科技',
         area: '9',
         price_unit: '个',
@@ -1036,7 +1079,6 @@ window.buildOrderImportTemplateCsv = function() {
         total_booth_fee: '5000',
         other_income: '0',
         fees_json: '[]',
-        paid_amount: '0',
         status: '正常',
         created_at: '2026-03-01 10:00:00',
         discount_reason: '',
@@ -1056,15 +1098,16 @@ window.downloadOrderImportTemplate = function() {
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = objectUrl;
-    anchor.download = 'historical-order-import-template.csv';
+    anchor.download = 'order-import-template.csv';
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(objectUrl);
 };
 
-window.renderOrderImportResult = function(payload, title = '历史订单导入预检查') {
-    const box = document.getElementById('order-import-result');
+window.renderOrderImportResult = function(payload, title = '订单导入预检查', context = window.currentOrderImportContext || 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
+    const box = window.getOrderImportElement('order-import-result', normalizedContext);
     if (!box) return;
     const summary = payload?.summary || {};
     const preview = Array.isArray(payload?.preview) ? payload.preview : [];
@@ -1074,6 +1117,7 @@ window.renderOrderImportResult = function(payload, title = '历史订单导入�
         `总行数：${summary.total_rows || 0}`,
         `通过：${summary.success_count || 0}`,
         `错误：${summary.error_count || 0}`,
+        `提醒：${summary.warning_count || 0}`,
         `单次上限：${summary.max_rows_per_import || 0}`
     ];
 
@@ -1088,8 +1132,9 @@ window.renderOrderImportResult = function(payload, title = '历史订单导入�
         lines.push('', '明细预览（最多显示前 50 行）：');
         preview.forEach((item) => {
             const boothText = Array.isArray(item.booth_ids) && item.booth_ids.length > 0 ? item.booth_ids.join(' / ') : '无展位';
-            const resultLabel = item.result === 'ok' ? '通过' : '错误';
-            lines.push(`${item.row_number}. [${resultLabel}] ${item.company_name || '未填企业'} | ${item.sales_name || '未填业务员'} | ${boothText} | ${window.formatCurrency(item.total_amount || 0)} | ${item.reason || ''}`);
+            const resultLabel = item.result === 'ok' ? '通过' : (item.result === 'warning' ? '提醒' : '错误');
+            const warningText = Array.isArray(item.warnings) && item.warnings.length > 0 ? ` | 提醒：${item.warnings.join('；')}` : '';
+            lines.push(`${item.row_number}. [${resultLabel}] ${item.company_name || '未填企业'} | ${item.sales_name || '未填业务员'} | ${boothText} | ${window.formatCurrency(item.total_amount || 0)} | ${item.reason || ''}${warningText}`);
         });
     }
 
@@ -1097,45 +1142,50 @@ window.renderOrderImportResult = function(payload, title = '历史订单导入�
     box.classList.remove('hidden');
 };
 
-window.hideOrderImportResult = function() {
-    const box = document.getElementById('order-import-result');
+window.hideOrderImportResult = function(context = window.currentOrderImportContext || 'config') {
+    const box = window.getOrderImportElement('order-import-result', context);
     if (box) box.classList.add('hidden');
 };
 
-window.onOrderImportFileChange = async function() {
-    const input = document.getElementById('order-import-file');
-    const nameBox = document.getElementById('order-import-file-name');
+window.onOrderImportFileChange = async function(context = 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
+    const input = window.getOrderImportElement('order-import-file', normalizedContext);
+    const nameBox = window.getOrderImportElement('order-import-file-name', normalizedContext);
     const file = input?.files?.[0] || null;
-    window.currentOrderImportCsvText = '';
-    window.hideOrderImportResult?.();
+    window.setOrderImportCsvText('', normalizedContext);
+    window.hideOrderImportResult?.(normalizedContext);
     if (!file) {
         if (nameBox) nameBox.innerText = '未选择文件';
         return;
     }
     if (nameBox) nameBox.innerText = `${file.name} · ${window.formatMoneyNumber(file.size || 0)} bytes`;
     try {
-        window.currentOrderImportCsvText = await file.text();
+        window.setOrderImportCsvText(await file.text(), normalizedContext);
     } catch (error) {
-        window.currentOrderImportCsvText = '';
+        window.setOrderImportCsvText('', normalizedContext);
         window.showToast('读取文件失败，请重试', 'error');
     }
 };
 
-window.ensureOrderImportCsvText = async function() {
-    if (window.currentOrderImportCsvText?.trim()) return window.currentOrderImportCsvText;
-    const input = document.getElementById('order-import-file');
+window.ensureOrderImportCsvText = async function(context = 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
+    const cachedText = window.getOrderImportCsvText(normalizedContext);
+    if (cachedText?.trim()) return cachedText;
+    const input = window.getOrderImportElement('order-import-file', normalizedContext);
     const file = input?.files?.[0] || null;
     if (!file) throw new Error('请先选择要导入的 CSV 文件');
-    window.currentOrderImportCsvText = await file.text();
-    return window.currentOrderImportCsvText;
+    const csvText = await file.text();
+    window.setOrderImportCsvText(csvText, normalizedContext);
+    return csvText;
 };
 
-window.previewOrderImport = async function() {
+window.previewOrderImport = async function(context = 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
     const pid = document.getElementById('global-project-select').value;
     if (!pid) return window.showToast('请先选择项目', 'error');
     try {
-        await window.withButtonLoading('btn-preview-order-import', async () => {
-            const csvText = await window.ensureOrderImportCsvText();
+        await window.withButtonLoading(normalizedContext === 'finance' ? 'btn-preview-order-import-finance' : 'btn-preview-order-import', async () => {
+            const csvText = await window.ensureOrderImportCsvText(normalizedContext);
             const result = await window.readApiJson(
                 await window.apiFetch('/api/order-import-preview', {
                     method: 'POST',
@@ -1144,7 +1194,7 @@ window.previewOrderImport = async function() {
                 '预检查失败',
                 {}
             );
-            window.renderOrderImportResult(result, '历史订单预检查完成');
+            window.renderOrderImportResult(result, '订单预检查完成', normalizedContext);
             window.showToast(result.can_import ? '预检查完成，可以正式导入' : '预检查完成，请先修正错误行', result.can_import ? 'success' : 'error');
         });
     } catch (e) {
@@ -1152,13 +1202,14 @@ window.previewOrderImport = async function() {
     }
 };
 
-window.runOrderImport = async function() {
+window.runOrderImport = async function(context = 'config') {
+    const normalizedContext = window.setOrderImportContext(context);
     const pid = document.getElementById('global-project-select').value;
     if (!pid) return window.showToast('请先选择项目', 'error');
-    if (!confirm('确定要把这份 CSV 的历史订单正式导入当前项目吗？导入后会真实写入订单数据，并更新展位状态。')) return;
+    if (!confirm('确定要把这份 CSV 的订单正式导入当前项目吗？导入后会真实写入订单数据，并更新展位状态；已收金额不会通过本功能入账。')) return;
     try {
-        await window.withButtonLoading('btn-run-order-import', async () => {
-            const csvText = await window.ensureOrderImportCsvText();
+        await window.withButtonLoading(normalizedContext === 'finance' ? 'btn-run-order-import-finance' : 'btn-run-order-import', async () => {
+            const csvText = await window.ensureOrderImportCsvText(normalizedContext);
             const response = await window.apiFetch('/api/order-import', {
                 method: 'POST',
                 body: JSON.stringify({ project_id: Number(pid), csv_text: csvText })
@@ -1169,12 +1220,14 @@ window.runOrderImport = async function() {
             } catch (error) {}
             if (!response.ok) {
                 if (result?.summary || result?.preview) {
-                    window.renderOrderImportResult(result, '历史订单导入失败');
+                    window.renderOrderImportResult(result, '订单导入失败', normalizedContext);
                 }
                 throw new Error(result?.error || '导入失败');
             }
-            window.renderOrderImportResult(result, '历史订单正式导入完成');
+            window.renderOrderImportResult(result, '订单正式导入完成', normalizedContext);
             window.showToast(`导入完成，已导入 ${Number(result?.summary?.imported_rows || 0)} 行`);
+            window.invalidateWorkbenchTabs?.({ groupIds: ['order-finance'], resetSnapshots: true });
+            window.markOrderDashboardDirty?.();
             await Promise.allSettled([
                 window.loadOrderList?.(),
                 window.initOrderForm?.(),

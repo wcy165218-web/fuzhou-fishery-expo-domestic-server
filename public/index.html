@@ -1689,9 +1689,9 @@
                             <div id="config-panel-order-import" class="config-panel hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                                 <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-5">
                                     <div>
-                                        <div id="order-import-project-label" class="text-xs tracking-wide text-slate-500 font-bold">当前项目 · 历史订单导入</div>
-                                        <h3 class="text-lg font-bold mt-2">历史订单导入</h3>
-                                        <p class="text-xs text-gray-500 mt-1">用于首次把旧系统或 Excel 里的历史订单批量导入当前项目。导入时会按当前项目的订单字段设置、业务员账号、代理商库和展位状态做校验。</p>
+                                        <div id="order-import-project-label" class="text-xs tracking-wide text-slate-500 font-bold">当前项目 · 订单导入</div>
+                                        <h3 class="text-lg font-bold mt-2">订单导入</h3>
+                                        <p class="text-xs text-gray-500 mt-1">用于把团队外部成交订单批量导入当前项目。导入时会按当前项目的订单字段设置、业务员账号、代理商库、企业重复和展位状态做校验。</p>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
                                         <button type="button" onclick="window.downloadOrderImportTemplate()" class="btn-secondary px-4 py-2 text-sm">
@@ -1720,7 +1720,7 @@
                                             <div>1. `sales_name` 必须和系统里的业务员账号名称完全一致。</div>
                                             <div>2. 必填字段会按当前项目的“订单字段设置”检查，不完整的行不会导入。</div>
                                             <div>3. 如果要导入代理商订单，`agent_name` 必须已经存在于代理商库。</div>
-                                            <div>4. 单个标准展位订单建议填写 `booth_display_name`；多展位订单可用 `selected_booths_json`。</div>
+                                            <div>4. 展位已占用时必须明确填写 `is_joint=是` 才会按联合参展处理，否则视为疑似填错展位号。</div>
                                             <div>5. 单次最多导入 300 行，建议先分批预检查。</div>
                                         </div>
                                     </div>
@@ -1728,11 +1728,12 @@
                                         <div class="font-bold text-slate-900">常用字段说明</div>
                                         <div>`is_agent` 支持 `直招` / `代理商招展` / `0` / `1`。</div>
                                         <div>`no_code_checked`、`no_booth_order` 支持 `0` / `1` / `是` / `否`。</div>
+                                        <div>`is_joint` 支持 `0` / `1` / `是` / `否`，只在确认为联合参展时填写 `是`。</div>
                                         <div>`fees_json` 需要是 JSON 数组，例如 `[{""name"":""广告费"",""amount"":2000}]`。</div>
                                         <div>`selected_booths_json` 适合多展位订单，数组元素可带 `booth_id`、`area`、`unit_price`、`standard_fee`、`is_joint`。</div>
                                         <div>`status` 仅支持 `正常`、`已退订`、`已作废`。</div>
                                         <div>`created_at` 推荐格式 `YYYY-MM-DD HH:mm:ss`。</div>
-                                        <div class="text-xs text-slate-500 pt-2 border-t border-slate-200">历史收款如果后续通过 ERP 同步补齐，这次订单导入里的 `paid_amount` 可以留空或填 `0`。</div>
+                                        <div class="text-xs text-slate-500 pt-2 border-t border-slate-200">本功能不导入已收金额；收款请后续通过 ERP 同步或手工收款处理。</div>
                                     </div>
                                 </div>
                                 <div id="order-import-result" class="mt-5 hidden bg-slate-950 text-slate-100 rounded-2xl p-4 text-sm whitespace-pre-wrap leading-6"></div>
@@ -3133,7 +3134,36 @@
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
                                     <span id="order-export-button-text">按筛选导出</span>
                                 </button>
+                                <button data-superadmin-order-import-action onclick="window.downloadOrderImportTemplate()" class="btn-secondary px-3 py-1.5 text-sm hidden">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
+                                    <span>下载导入模板</span>
+                                </button>
+                                <button data-superadmin-order-import-action onclick="window.openFinanceOrderImportPanel()" class="btn-dark px-3 py-1.5 text-sm hidden">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.75v10.5"/><path d="m7.5 9 4.5 5.25L16.5 9"/><path d="M4.5 20.25h15"/></svg>
+                                    <span>导入订单</span>
+                                </button>
                             </div>
+                        </div>
+                        <div id="order-import-inline-panel" class="hidden mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <div id="order-import-project-label-finance" class="text-xs tracking-wide text-blue-700 font-bold">当前项目 · 订单导入</div>
+                                    <div class="mt-1 text-sm font-black text-slate-900">导入成交订单</div>
+                                    <div class="mt-1 text-xs leading-6 text-slate-600">仅超级管理员可操作。企业重复会提示但不拦截；展位已占用时必须明确填写“联合参展=是”；已收金额不会通过本功能入账。</div>
+                                </div>
+                                <button type="button" onclick="window.closeFinanceOrderImportPanel()" class="btn-secondary px-3 py-1.5 text-xs">收起</button>
+                            </div>
+                            <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                                <div>
+                                    <input id="order-import-file-finance" type="file" accept=".csv,text/csv" onchange="window.onOrderImportFileChange('finance')" class="block w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-blue-100 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-200">
+                                    <div id="order-import-file-name-finance" class="mt-2 text-xs text-slate-500">未选择文件</div>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button id="btn-preview-order-import-finance" type="button" onclick="window.previewOrderImport('finance')" class="btn-primary px-4 py-2 text-sm">预检查</button>
+                                    <button id="btn-run-order-import-finance" type="button" onclick="window.runOrderImport('finance')" class="btn-dark px-4 py-2 text-sm">正式导入</button>
+                                </div>
+                            </div>
+                            <div id="order-import-result-finance" class="mt-4 hidden bg-slate-950 text-slate-100 rounded-xl p-4 text-sm whitespace-pre-wrap leading-6"></div>
                         </div>
                         <div class="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500">
                             <div>超级管理员可导出当前筛选内全部订单与合同；管理员和业务员仅可导出自己名下企业。</div>

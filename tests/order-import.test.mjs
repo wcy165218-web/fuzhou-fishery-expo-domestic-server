@@ -57,10 +57,11 @@ function createMockEnv(options = {}) {
     return { DB, captured };
 }
 
-function createBaseEnv() {
+function createBaseEnv(options = {}) {
     return createMockEnv({
         firstResponses: {
-            'SELECT id, name FROM Projects': { id: 7, name: '福州渔博会 2026' }
+            'SELECT id, name FROM Projects': { id: 7, name: '福州渔博会 2026' },
+            ...(options.firstResponses || {})
         },
         allResponses: {
             'FROM ProjectOrderFieldSettings': { results: [] },
@@ -68,12 +69,15 @@ function createBaseEnv() {
             'SELECT id, hall, type, area, price_unit, base_price': { results: [{ id: '1A01', hall: '1号馆', type: '标摊', area: 9, price_unit: '个', base_price: 5000 }] },
             "FROM Orders\n            WHERE project_id = ?\n              AND booth_id IN": { results: [] },
             'SELECT id, status': { results: [{ id: '1A01', status: '可售' }] },
-            "SELECT booth_id, paid_amount, total_amount\n            FROM Orders": { results: [{ booth_id: '1A01', paid_amount: 0, total_amount: 5000 }] }
+            "SELECT booth_id, paid_amount, total_amount\n            FROM Orders": { results: [{ booth_id: '1A01', paid_amount: 0, total_amount: 5000 }] },
+            ...(options.allResponses || {})
         },
         runResponses: {
             'DELETE FROM BoothLocks': { meta: { changes: 1 } },
-            'INSERT INTO BoothLocks': { meta: { changes: 1 } }
-        }
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } },
+            ...(options.runResponses || {})
+        },
+        batchResponses: options.batchResponses
     });
 }
 
@@ -167,11 +171,96 @@ async function testExecuteOrderImportWritesOrders() {
     assert.ok(boothStatusUpdate, 'should refresh booth runtime status after import');
   }
 
+async function testPlanWarnsButAllowsExistingCompanyName() {
+    const env = createBaseEnv({
+        allResponses: {
+            'SELECT company_name\n            FROM Orders': { results: [{ company_name: '示例海洋科技' }] }
+        }
+    });
+    const csvText = [
+        'sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,booth_display_name,area,price_unit,unit_price,total_booth_fee,created_at',
+        '张三,示例海洋科技,91350100MA12345678,0,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,企业简介,直招,1A01,海洋科技,9,个,5000,5000,2026-03-01 10:00:00'
+    ].join('\n');
+
+    const plan = await buildOrderImportPlan(env, 7, csvText);
+    assert.equal(plan.summary.error_count, 0);
+    assert.equal(plan.summary.warning_count, 1);
+    assert.equal(plan.preview[0].result, 'warning');
+    assert.match(plan.preview[0].warnings.join('；'), /参展企业全称已存在/);
+}
+
+async function testPlanRejectsOccupiedBoothWithoutJointFlag() {
+    const env = createBaseEnv({
+        allResponses: {
+            "FROM Orders\n            WHERE project_id = ?\n              AND booth_id IN": { results: [{ id: 42, booth_id: '1A01', area: 9, created_at: '2026-03-01 09:00:00' }] }
+        }
+    });
+    const csvText = [
+        'sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,booth_display_name,area,price_unit,unit_price,total_booth_fee,created_at',
+        '张三,联合海洋科技,91350100MA12345678,0,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,企业简介,直招,1A01,联合海洋,3,个,5000,3000,2026-03-01 10:00:00'
+    ].join('\n');
+
+    const plan = await buildOrderImportPlan(env, 7, csvText);
+    assert.equal(plan.summary.error_count, 1);
+    assert.match(plan.preview[0].reason, /如确认为联合参展/);
+}
+
+async function testPlanAcceptsOccupiedBoothWithJointFlag() {
+    const env = createBaseEnv({
+        allResponses: {
+            "FROM Orders\n            WHERE project_id = ?\n              AND booth_id IN": { results: [{ id: 42, booth_id: '1A01', area: 9, created_at: '2026-03-01 09:00:00' }] }
+        }
+    });
+    const csvText = [
+        'sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,is_joint,booth_display_name,area,price_unit,unit_price,total_booth_fee,created_at',
+        '张三,联合海洋科技,91350100MA12345678,0,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,企业简介,直招,1A01,是,联合海洋,3,个,5000,3000,2026-03-01 10:00:00'
+    ].join('\n');
+
+    const plan = await buildOrderImportPlan(env, 7, csvText);
+    assert.equal(plan.summary.error_count, 0);
+    assert.equal(plan.summary.success_count, 1);
+    assert.equal(plan.dbAreaAdjustments.get(42), 3);
+}
+
+async function testPlanRejectsJointFlagForUnoccupiedBooth() {
+    const env = createBaseEnv();
+    const csvText = [
+        'sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,is_joint,booth_display_name,area,price_unit,unit_price,total_booth_fee,created_at',
+        '张三,联合海洋科技,91350100MA12345678,0,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,企业简介,直招,1A01,是,联合海洋,3,个,5000,3000,2026-03-01 10:00:00'
+    ].join('\n');
+
+    const plan = await buildOrderImportPlan(env, 7, csvText);
+    assert.equal(plan.summary.error_count, 1);
+    assert.match(plan.preview[0].reason, /当前未被占用/);
+}
+
+async function testExecuteIgnoresPaidAmountWithWarning() {
+    const env = createBaseEnv();
+    const csvText = [
+        'sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,booth_display_name,area,price_unit,unit_price,total_booth_fee,paid_amount,created_at',
+        '张三,示例海洋科技,91350100MA12345678,0,王经理,13800000001,福建省 - 福州市 - 鼓楼区,水产预制菜,海鲜加工,企业简介,直招,1A01,海洋科技,9,个,5000,5000,1000,2026-03-01 10:00:00'
+    ].join('\n');
+
+    const result = await executeOrderImport(env, 7, csvText);
+    assert.equal(result.success, true);
+    assert.equal(result.summary.warning_count, 1);
+
+    const batchStatements = env.captured.batchCalls.flat();
+    const orderInsert = batchStatements.find((statement) => statement.sql.includes('INSERT INTO Orders'));
+    assert.ok(orderInsert, 'should insert imported order');
+    assert.equal(orderInsert.params[21], 0);
+}
+
 await testPlanRejectsMissingRequiredField();
 await testPlanMapsSalespersonAndBoothSuccessfully();
 await testPlanAcceptsAnnotatedTemplateHeaders();
 await testPlanAcceptsNewChineseProfileHeader();
 await testPlanRejectsLongProfile();
 await testExecuteOrderImportWritesOrders();
+await testPlanWarnsButAllowsExistingCompanyName();
+await testPlanRejectsOccupiedBoothWithoutJointFlag();
+await testPlanAcceptsOccupiedBoothWithJointFlag();
+await testPlanRejectsJointFlagForUnoccupiedBooth();
+await testExecuteIgnoresPaidAmountWithWarning();
 
 console.log('order-import tests passed');

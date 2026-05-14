@@ -24,7 +24,7 @@ const configNavItems = [
     { key: 'basic', label: '基础配置', icon: 'folders' },
     { key: 'staff', label: '业务员与目标管理', icon: 'users' },
     { key: 'order-fields', label: '订单字段设置', icon: 'fields' },
-    { key: 'order-import', label: '历史订单导入', icon: 'clipboard' }
+    { key: 'order-import', label: '订单导入', icon: 'clipboard' }
 ];
 const boothMapNavItems = [
     { key: 'canvas', label: '管理画布', icon: 'folders' },
