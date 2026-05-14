@@ -56,6 +56,7 @@ function createElement(id = '', tagName = 'div') {
   return {
     id,
     tagName: String(tagName || 'div').toUpperCase(),
+    attributes: {},
     className: '',
     classList: createClassList(),
     style: {},
@@ -63,7 +64,15 @@ function createElement(id = '', tagName = 'div') {
     innerText: '',
     value: '',
     checked: false,
+    clientWidth: 800,
+    clientHeight: 450,
     dataset: {},
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    getAttribute(name) {
+      return this.attributes[name];
+    },
     addEventListener() {},
     removeEventListener() {},
     appendChild() {},
@@ -163,6 +172,7 @@ function createHarness() {
   return {
     window,
     document,
+    context,
     getRenderCalls() {
       return renderCalls;
     }
@@ -216,6 +226,64 @@ function testLintelPreviewFiltersDriveVisibilityAndLegend() {
   assert.equal(legend.some((item) => item.label === '光地未报图'), true);
   assert.equal(legend.some((item) => item.label === '无状态'), false);
   assert.equal(getRenderCalls(), 3);
+}
+
+function testPreviewSearchLocatesOrderCompanyAndKeepsMatchVisible() {
+  const { window, document, context, getRenderCalls } = createHarness();
+  context.currentBoothMap = { id: 1, canvas_width: 1600, canvas_height: 900 };
+  context.currentBoothMapItems = [
+    { id: 101, booth_code: '1A01', booth_type: '标摊', shape_type: 'rect', x: 100, y: 100, width_m: 3, height_m: 3 },
+    { id: 102, booth_code: '1A02', booth_type: '光地', shape_type: 'rect', x: 640, y: 360, width_m: 1, height_m: 1 }
+  ];
+  const state = window.getBoothMapState();
+  state.runtimeByBoothCode = {
+    '1A01': {
+      booth_code: '1A01',
+      status_code: 'available',
+      company_text: '',
+      order_summaries: []
+    },
+    '1A02': {
+      booth_code: '1A02',
+      status_code: 'full_paid',
+      company_text: '福州海洋科技有限公司',
+      order_summaries: [{ company_name: '福州海洋科技有限公司' }]
+    }
+  };
+  window.toggleBoothMapPreviewFilter('full_paid', false);
+  assert.equal(window.isBoothMapItemVisibleInPreview(context.currentBoothMapItems[1]), false);
+
+  document.getElementById('booth-map-preview-search-input').value = '海洋科技';
+  window.searchBoothMapPreviewItem();
+
+  assert.equal(state.previewSearchHighlightItemId, '102');
+  assert.equal(window.isBoothMapItemVisibleInPreview(context.currentBoothMapItems[1]), true);
+  assert.match(document.getElementById('booth-map-preview-search-result').innerText, /1A02/);
+  const viewBox = document.getElementById('booth-map-runtime-svg').getAttribute('viewBox').split(/\s+/).map(Number);
+  assert.equal(viewBox.length, 4);
+  assert.ok(viewBox[2] < 1600);
+  assert.equal(getRenderCalls(), 2);
+}
+
+function testPreviewSearchCanClearHighlight() {
+  const { window, document, context, getRenderCalls } = createHarness();
+  context.currentBoothMap = { id: 1, canvas_width: 1600, canvas_height: 900 };
+  context.currentBoothMapItems = [
+    { id: 201, booth_code: '2B01', booth_type: '标摊', shape_type: 'rect', x: 40, y: 60, width_m: 3, height_m: 3 }
+  ];
+  window.getBoothMapState().runtimeByBoothCode = {
+    '2B01': { booth_code: '2B01', company_text: '测试企业' }
+  };
+
+  document.getElementById('booth-map-preview-search-input').value = '2b01';
+  window.searchBoothMapPreviewItem();
+  assert.equal(window.getBoothMapState().previewSearchHighlightItemId, '201');
+
+  window.clearBoothMapPreviewSearch();
+  assert.equal(window.getBoothMapState().previewSearchHighlightItemId, '');
+  assert.equal(document.getElementById('booth-map-preview-search-input').value, '');
+  assert.match(document.getElementById('booth-map-preview-search-result').innerText, /快速定位/);
+  assert.equal(getRenderCalls(), 2);
 }
 
 function testBoothNumberUsesFixedWidthBottomLeftLayout() {
@@ -427,6 +495,8 @@ function testBoothNumberUsesFixedWidthBottomLeftLayout() {
 
 testSwitchToLintelModeShowsCorrectFilterGroup();
 testLintelPreviewFiltersDriveVisibilityAndLegend();
+testPreviewSearchLocatesOrderCompanyAndKeepsMatchVisible();
+testPreviewSearchCanClearHighlight();
 testBoothNumberUsesFixedWidthBottomLeftLayout();
 
 console.log('Booth map preview filter tests passed');

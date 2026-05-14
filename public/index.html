@@ -2503,14 +2503,22 @@
                                             <button id="btn-export-booth-map-preview" type="button" class="btn-primary px-4 py-2 text-sm whitespace-nowrap" onclick="window.exportBoothMapPreviewAsJpg()">预览导出 JPG</button>
                                         </div>
                                     </div>
-                                    <div class="grid lg:grid-cols-[minmax(0,280px)_1fr] gap-3 items-end">
+                                    <div class="grid xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-3 items-end">
                                         <div>
                                             <label class="booth-map-field-label">选择画布</label>
                                             <select id="booth-map-preview-select" onchange="window.handleBoothMapPreviewSelectChange(this.value)" class="w-full border px-3 py-2.5 rounded-xl bg-white text-slate-700 font-bold">
                                                 <option value="">请选择画布</option>
                                             </select>
                                         </div>
-                                        <div class="text-xs text-slate-500 leading-6">管理员可在终版预览中直接切换不同画布查看当前状态。</div>
+                                        <div>
+                                            <label class="booth-map-field-label">快速定位</label>
+                                            <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+                                                <input type="search" id="booth-map-preview-search-input" class="w-full border px-3 py-2.5 rounded-xl bg-white font-bold" placeholder="搜索展位号 / 企业名" onkeydown="if(event.key==='Enter') window.searchBoothMapPreviewItem()">
+                                                <button type="button" onclick="window.searchBoothMapPreviewItem()" class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap">定位</button>
+                                                <button type="button" onclick="window.clearBoothMapPreviewSearch()" class="btn-secondary px-3 py-2.5 text-sm whitespace-nowrap">清除</button>
+                                            </div>
+                                            <div id="booth-map-preview-search-result" class="mt-2 text-xs font-bold text-slate-500">可按展位号或订单企业名快速定位。</div>
+                                        </div>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2 mt-2">
                                         <span class="text-xs font-bold text-slate-500 mr-1">筛选模式：</span>
