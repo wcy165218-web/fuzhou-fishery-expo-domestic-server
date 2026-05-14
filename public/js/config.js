@@ -49,6 +49,30 @@ window.orderImportTemplateColumns = [
     { key: 'selected_booths_json', header: 'selected_booths_json（多展位 JSON，没有填空）' }
 ];
 window.orderImportTemplateHeaders = window.orderImportTemplateColumns.map((column) => column.header);
+window.orderCollectionTemplateColumns = [
+    { key: 'sales_name', header: '业务员（订单归属，必须与系统账号一致）' },
+    { key: 'company_name', header: '参展企业全称' },
+    { key: 'credit_code', header: '统一社会信用代码' },
+    { key: 'no_code_checked', header: '是否无代码' },
+    { key: 'contact_person', header: '联系人' },
+    { key: 'phone', header: '联系电话' },
+    { key: 'region', header: '所在地区' },
+    { key: 'category', header: '产品分类' },
+    { key: 'main_business', header: '主营业务/详细展品' },
+    { key: 'profile', header: '企业简介或产品亮点（300字以内）' },
+    { key: 'is_agent', header: '招展渠道（直招/代理商招展）' },
+    { key: 'agent_name', header: '代理商公司名称（代理商招展时填写）' },
+    { key: 'booth_id', header: '展位号（多展位用逗号隔开）' },
+    { key: 'is_joint', header: '是否联合参展' },
+    { key: 'area', header: '联合参展分配面积' },
+    { key: 'booth_display_name', header: '展位图简称' },
+    { key: 'total_booth_fee', header: '最终成交展位费' },
+    { key: 'other_income', header: '其他应收合计' },
+    { key: 'no_booth_order', header: '是否无展位订单' },
+    { key: 'created_at', header: '订单录入时间' },
+    { key: 'discount_reason', header: '优惠说明' },
+    { key: 'contract_url', header: '合同附件地址' }
+];
 
 window.setOrderImportContext = function(context = 'config') {
     const normalizedContext = context === 'finance' ? 'finance' : 'config';
@@ -1092,17 +1116,80 @@ window.buildOrderImportTemplateCsv = function() {
     return `${headerLine}\n${sampleLine}\n`;
 };
 
-window.downloadOrderImportTemplate = function() {
-    const csvText = window.buildOrderImportTemplateCsv();
+window.buildOrderCollectionTemplateCsv = function() {
+    const guideRow = {
+        sales_name: '填写负责跟进的业务员姓名',
+        company_name: '填写企业营业执照全称',
+        credit_code: '没有统一社会信用代码时留空，并在“是否无代码”填 是',
+        no_code_checked: '是/否',
+        contact_person: '填写主要联系人',
+        phone: '填写手机号或固定电话',
+        region: '例如 福建省 - 福州市 - 鼓楼区',
+        category: '填写产品分类',
+        main_business: '填写主营业务或详细展品',
+        profile: '填写一句企业简介或产品亮点，300字以内',
+        is_agent: '直招/代理商招展',
+        agent_name: '代理商招展时填写代理商公司名称',
+        booth_id: '例如 1A01；多展位填 1A01,1A02',
+        is_joint: '是/否；同一个展位多个企业共用时填 是',
+        area: '联合参展时填写本企业分配面积；非联合可留空',
+        booth_display_name: '用于展位图显示的简称，可留空',
+        total_booth_fee: '填写最终成交展位费，纯无展位订单填 0',
+        other_income: '搭建费、广告费等其他应收合计，没有填 0',
+        no_booth_order: '是/否；没有展位、只有其他应收时填 是',
+        created_at: '格式 2026-03-01 10:00:00，可留空',
+        discount_reason: '成交价低于标准价时填写原因',
+        contract_url: '有线上合同或附件地址时填写'
+    };
+    const sampleRow = {
+        sales_name: '张三',
+        company_name: '福州示例海洋科技有限公司',
+        credit_code: '91350100MA12345678',
+        no_code_checked: '否',
+        contact_person: '王经理',
+        phone: '13800000001',
+        region: '福建省 - 福州市 - 鼓楼区',
+        category: '水产预制菜',
+        main_business: '海鲜加工与冷链产品',
+        profile: '主营海鲜加工、冷链与预制菜产品。',
+        is_agent: '直招',
+        agent_name: '',
+        booth_id: '1A01',
+        is_joint: '否',
+        area: '',
+        booth_display_name: '海洋科技',
+        total_booth_fee: '5000',
+        other_income: '0',
+        no_booth_order: '否',
+        created_at: '2026-03-01 10:00:00',
+        discount_reason: '',
+        contract_url: ''
+    };
+    const columns = window.orderCollectionTemplateColumns || [];
+    const headerLine = columns.map((column) => window.escapeCsvCell(column.header)).join(',');
+    const guideLine = columns.map((column) => window.escapeCsvCell(guideRow[column.key] ?? '')).join(',');
+    const sampleLine = columns.map((column) => window.escapeCsvCell(sampleRow[column.key] ?? '')).join(',');
+    return `${headerLine}\n${guideLine}\n${sampleLine}\n`;
+};
+
+window.downloadCsvTemplate = function(csvText, filename) {
     const blob = new Blob([`\uFEFF${csvText}`], { type: 'text/csv;charset=utf-8;' });
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = objectUrl;
-    anchor.download = 'order-import-template.csv';
+    anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(objectUrl);
+};
+
+window.downloadOrderImportTemplate = function() {
+    window.downloadCsvTemplate(window.buildOrderImportTemplateCsv(), 'order-import-template.csv');
+};
+
+window.downloadOrderCollectionTemplate = function() {
+    window.downloadCsvTemplate(window.buildOrderCollectionTemplateCsv(), 'order-collection-template.csv');
 };
 
 window.renderOrderImportResult = function(payload, title = '订单导入预检查', context = window.currentOrderImportContext || 'config') {

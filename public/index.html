@@ -1694,9 +1694,13 @@
                                         <p class="text-xs text-gray-500 mt-1">用于把团队外部成交订单批量导入当前项目。导入时会按当前项目的订单字段设置、业务员账号、代理商库、企业重复和展位状态做校验。</p>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
+                                        <button type="button" onclick="window.downloadOrderCollectionTemplate()" class="btn-secondary px-4 py-2 text-sm">
+                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 18.75h15"/></svg>
+                                            <span>下载外发收集表</span>
+                                        </button>
                                         <button type="button" onclick="window.downloadOrderImportTemplate()" class="btn-secondary px-4 py-2 text-sm">
                                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 18.75h15"/></svg>
-                                            <span>下载模板</span>
+                                            <span>下载系统导入模板</span>
                                         </button>
                                         <button id="btn-preview-order-import" type="button" onclick="window.previewOrderImport()" class="btn-primary px-4 py-2 text-sm">
                                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
@@ -1721,7 +1725,8 @@
                                             <div>2. 必填字段会按当前项目的“订单字段设置”检查，不完整的行不会导入。</div>
                                             <div>3. 如果要导入代理商订单，`agent_name` 必须已经存在于代理商库。</div>
                                             <div>4. 展位已占用时必须明确填写 `is_joint=是` 才会按联合参展处理，否则视为疑似填错展位号。</div>
-                                            <div>5. 单次最多导入 300 行，建议先分批预检查。</div>
+                                            <div>5. 外发收集表拿回后，请删除填写说明行，只保留真实订单数据再上传预检查。</div>
+                                            <div>6. 单次最多导入 300 行，建议先分批预检查。</div>
                                         </div>
                                     </div>
                                     <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 text-sm text-slate-700 space-y-3">
@@ -3134,9 +3139,13 @@
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
                                     <span id="order-export-button-text">按筛选导出</span>
                                 </button>
+                                <button data-superadmin-order-import-action onclick="window.downloadOrderCollectionTemplate()" class="btn-secondary px-3 py-1.5 text-sm hidden">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
+                                    <span>外发收集表</span>
+                                </button>
                                 <button data-superadmin-order-import-action onclick="window.downloadOrderImportTemplate()" class="btn-secondary px-3 py-1.5 text-sm hidden">
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>
-                                    <span>下载导入模板</span>
+                                    <span>系统导入模板</span>
                                 </button>
                                 <button data-superadmin-order-import-action onclick="window.openFinanceOrderImportPanel()" class="btn-dark px-3 py-1.5 text-sm hidden">
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.75v10.5"/><path d="m7.5 9 4.5 5.25L16.5 9"/><path d="M4.5 20.25h15"/></svg>
