@@ -28,9 +28,9 @@ fail() {
 }
 
 require_clean_worktree() {
-  local status
-  status=$(git status --porcelain)
-  [[ -z "$status" ]] || fail "working tree is not clean; commit or stash changes first"
+  local worktree_status
+  worktree_status=$(git status --porcelain)
+  [[ -z "$worktree_status" ]] || fail "working tree is not clean; commit or stash changes first"
 }
 
 require_release_branch() {
