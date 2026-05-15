@@ -286,6 +286,35 @@ function testPreviewSearchCanClearHighlight() {
   assert.equal(getRenderCalls(), 2);
 }
 
+function testJointCompanyNamesUseSeparateEllipsizedLines() {
+  const { window } = createHarness();
+  const compactBlock = window.fitBoothMapJointCompanyBlock(
+    ['福州海洋科技有限公司', '厦门远洋渔业发展有限公司', '福建超长联合参展企业名称有限公司'],
+    14,
+    150,
+    28,
+    -0.08
+  );
+  assert.equal(compactBlock.lines.length, 2);
+  assert.match(compactBlock.lines[0], /福州海洋科技/);
+  assert.match(compactBlock.lines[1], /…$/);
+
+  const markup = window.renderBoothMapItemText(
+    { id: 301, booth_code: '3C01', booth_type: '标摊', shape_type: 'rect', width_m: 3, height_m: 3 },
+    220,
+    90,
+    {
+      company_text: '福州海洋科技有限公司\n厦门远洋渔业发展有限公司',
+      company_names: ['福州海洋科技有限公司', '厦门远洋渔业发展有限公司']
+    },
+    'preview',
+    { canvas_width: 800, canvas_height: 600, display_config: {} },
+    'clip-joint'
+  );
+  assert.match(markup, /福州海洋科技有限公司/);
+  assert.match(markup, /厦门远洋渔业发展有限公司/);
+}
+
 function testBoothNumberUsesFixedWidthBottomLeftLayout() {
   const { window } = createHarness();
   const getFirstTextY = (markup) => Number(markup.match(/<text[\s\S]*?y="([0-9.]+)"/)?.[1] || 0);
@@ -497,6 +526,7 @@ testSwitchToLintelModeShowsCorrectFilterGroup();
 testLintelPreviewFiltersDriveVisibilityAndLegend();
 testPreviewSearchLocatesOrderCompanyAndKeepsMatchVisible();
 testPreviewSearchCanClearHighlight();
+testJointCompanyNamesUseSeparateEllipsizedLines();
 testBoothNumberUsesFixedWidthBottomLeftLayout();
 
 console.log('Booth map preview filter tests passed');

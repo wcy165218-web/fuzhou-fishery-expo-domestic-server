@@ -9,7 +9,7 @@ import {
   applyStateMetricsToBucket,
   resolveOrderPaymentStage
 } from '../src/utils/helpers.mjs';
-import { deriveBoothRuntimeStatus } from '../src/services/booth-map-view.mjs';
+import { deriveBoothRuntimeStatus, resolveBoothCompanyText } from '../src/services/booth-map-view.mjs';
 import { replaceOrderBoothCodes } from '../src/routes/booth-maps.mjs';
 
 
@@ -85,6 +85,44 @@ function runTests() {
       label: '已付全款',
       fillColor: '#ef4444',
       strokeColor: '#991b1b'
+    }
+  );
+
+  assert.deepEqual(
+    deriveBoothRuntimeStatus('可售', [
+      { total_amount: 1000, paid_amount: 1000 },
+      { total_amount: 1000, paid_amount: 0 }
+    ]),
+    {
+      code: 'deposit',
+      label: '已付定金',
+      fillColor: '#3b82f6',
+      strokeColor: '#1d4ed8'
+    }
+  );
+
+  assert.deepEqual(
+    deriveBoothRuntimeStatus('可售', [
+      { total_amount: 1000, paid_amount: 1000 },
+      { total_amount: 2000, paid_amount: 2000 }
+    ]),
+    {
+      code: 'full_paid',
+      label: '已付全款',
+      fillColor: '#ef4444',
+      strokeColor: '#991b1b'
+    }
+  );
+
+  assert.deepEqual(
+    resolveBoothCompanyText('标摊', [
+      { company_name: '福州海洋科技有限公司' },
+      { booth_display_name: '厦门远洋渔业发展有限公司', company_name: '厦门远洋渔业有限公司' }
+    ]),
+    {
+      companyText: '福州海洋科技有限公司\n厦门远洋渔业发展有限公司',
+      companyTextSource: 'joint_order_company_names',
+      companyNames: ['福州海洋科技有限公司', '厦门远洋渔业发展有限公司']
     }
   );
 

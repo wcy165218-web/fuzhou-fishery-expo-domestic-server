@@ -108,26 +108,28 @@ export function deriveBoothRuntimeStatus(storedStatus, activeOrders = []) {
         return STATUS_META.available;
     }
 
-    const hasFullPaid = normalizedOrders.some((order) => resolveOrderPaymentStage(order.paid_amount, order.total_amount) === 'full_paid');
-    if (hasFullPaid) return STATUS_META.full_paid;
-
-    const hasDeposit = normalizedOrders.some((order) => resolveOrderPaymentStage(order.paid_amount, order.total_amount) === 'deposit');
-    if (hasDeposit) return STATUS_META.deposit;
-
-    return STATUS_META.reserved;
+    const totalPaidAmount = normalizedOrders.reduce((sum, order) => sum + Number(order?.paid_amount || 0), 0);
+    const totalReceivableAmount = normalizedOrders.reduce((sum, order) => sum + Number(order?.total_amount || 0), 0);
+    const paymentStage = resolveOrderPaymentStage(totalPaidAmount, totalReceivableAmount);
+    return STATUS_META[paymentStage] || STATUS_META.reserved;
 }
 
 export function resolveBoothCompanyText(boothType, activeOrders = []) {
     if (!Array.isArray(activeOrders) || activeOrders.length === 0) {
         return {
             companyText: '',
-            companyTextSource: ''
+            companyTextSource: '',
+            companyNames: []
         };
     }
+    const companyNames = activeOrders
+        .map((order) => String(order?.booth_display_name || order?.company_name || '').trim())
+        .filter(Boolean);
     if (activeOrders.length > 1) {
         return {
-            companyText: '联合参展',
-            companyTextSource: 'joint_order'
+            companyText: companyNames.join('\n'),
+            companyTextSource: 'joint_order_company_names',
+            companyNames
         };
     }
 
@@ -139,13 +141,15 @@ export function resolveBoothCompanyText(boothType, activeOrders = []) {
     if (normalizedBoothType === '光地') {
         return {
             companyText: displayName || companyName,
-            companyTextSource: displayName ? 'booth_display_name' : 'company_name'
+            companyTextSource: displayName ? 'booth_display_name' : 'company_name',
+            companyNames: [displayName || companyName].filter(Boolean)
         };
     }
 
     return {
         companyText: displayName || companyName,
-        companyTextSource: displayName ? 'booth_display_name' : 'company_name'
+        companyTextSource: displayName ? 'booth_display_name' : 'company_name',
+        companyNames: [displayName || companyName].filter(Boolean)
     };
 }
 
@@ -549,6 +553,7 @@ export async function getBoothMapRuntimeView(env, projectId, mapId) {
                 booth_no_text: normalizedBoothCode,
                 company_text: companyInfo.companyText,
                 company_text_source: companyInfo.companyTextSource,
+                company_names: companyInfo.companyNames,
                 order_summaries: orderSummaries
             };
         })
