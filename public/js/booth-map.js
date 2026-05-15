@@ -544,6 +544,44 @@ window.fitBoothMapCompanyBlock = function(text, fontSize, maxWidth, maxHeight, m
     };
 }
 
+window.fitBoothMapJointCompanyBlock = function(companyNames = [], fontSize, maxWidth, maxHeight, letterSpacingEm = 0) {
+    const names = (Array.isArray(companyNames) ? companyNames : [])
+        .map((name) => String(name || '').trim())
+        .filter(Boolean);
+    if (!names.length) {
+        return { lines: [], fontSize: 1, lineHeight: 0.98 };
+    }
+    const safeWidth = Math.max(Number(maxWidth || 0), 18);
+    const safeHeight = Math.max(Number(maxHeight || 0), 12);
+    let nextFontSize = Math.max(Number(fontSize || 12), 1);
+    while (nextFontSize >= 1) {
+        const lineHeight = nextFontSize * 0.98;
+        const maxLines = Math.max(1, Math.min(names.length, Math.floor(safeHeight / Math.max(lineHeight, 1))));
+        const lines = names.slice(0, maxLines).map((name) => (
+            window.fitBoothMapSingleLine(name, nextFontSize, safeWidth, letterSpacingEm)
+        ));
+        if (names.length > maxLines) {
+            const lastIndex = lines.length - 1;
+            const lastName = String(names[lastIndex] || '');
+            const markerText = lastName.endsWith('…') ? lastName : `${lastName}…`;
+            lines[lastIndex] = window.fitBoothMapSingleLine(markerText, nextFontSize, safeWidth, letterSpacingEm);
+        }
+        if (lines.length * lineHeight <= safeHeight || nextFontSize <= 1) {
+            return {
+                lines,
+                fontSize: Number(nextFontSize.toFixed(2)),
+                lineHeight: Number(lineHeight.toFixed(2))
+            };
+        }
+        nextFontSize -= 1;
+    }
+    return {
+        lines: [window.fitBoothMapSingleLine(names[0], 1, safeWidth, letterSpacingEm)],
+        fontSize: 1,
+        lineHeight: 0.98
+    };
+}
+
 window.fitBoothMapSingleLineBlock = function(text, fontSize, maxWidth, maxHeight, letterSpacingEm = 0, minFontSize = 1, fontFamily = '') {
     const normalized = String(text || '').trim();
     const safeWidth = Math.max(Number(maxWidth || 0), 8);
@@ -631,7 +669,7 @@ window.getBoothMapPreviewSearchResultText = function(item) {
     if (!item) return '';
     const runtimeItem = window.getBoothMapRuntimeItem(item.booth_code);
     const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
-    const companyName = String(runtimeItem?.company_text || orderSummaries[0]?.company_name || '').trim();
+    const companyName = String(runtimeItem?.company_text || orderSummaries[0]?.company_name || '').trim().replace(/\s*\n+\s*/g, '、');
     const boothCode = window.normalizeBoothCode(item.booth_code);
     return companyName ? `${boothCode}｜${companyName}` : boothCode;
 }
@@ -3416,6 +3454,10 @@ window.renderBoothMapItemText = function(item, widthPx, heightPx, runtimeItem, m
         lineHeight: Number((boothNoFontSize * 0.98).toFixed(2))
     };
     const companyText = mode === 'preview' ? (runtimeItem?.company_text || '') : '';
+    const companyTextLines = String(companyText || '').split(/\n+/).map((name) => name.trim()).filter(Boolean);
+    const jointCompanyNames = mode === 'preview' && Array.isArray(runtimeItem?.company_names)
+        ? runtimeItem.company_names.map((name) => String(name || '').trim()).filter(Boolean)
+        : (companyTextLines.length > 1 ? companyTextLines : []);
     const textMarkup = [];
     const escapedFontFamily = window.escapeAttr ? window.escapeAttr(fontFamily) : fontFamily.replace(/"/g, '&quot;');
     const escapedBoothNoFontFamily = window.escapeAttr ? window.escapeAttr(boothNoFontFamily) : boothNoFontFamily.replace(/"/g, '&quot;');
@@ -3447,7 +3489,9 @@ window.renderBoothMapItemText = function(item, widthPx, heightPx, runtimeItem, m
     if (companyConfig.visible && companyText) {
         const availableWidth = Math.max(widthPx - paddingX * 1.8, 18);
         const availableHeight = Math.max(heightPx - paddingY * 2.1, 12);
-        const companyBlock = window.fitBoothMapCompanyBlock(companyText, companyConfig.fontSize, availableWidth, availableHeight, 2, companyLetterSpacing);
+        const companyBlock = jointCompanyNames.length > 1
+            ? window.fitBoothMapJointCompanyBlock(jointCompanyNames, companyConfig.fontSize, availableWidth, availableHeight, companyLetterSpacing)
+            : window.fitBoothMapCompanyBlock(companyText, companyConfig.fontSize, availableWidth, availableHeight, 2, companyLetterSpacing);
         const companyLines = companyBlock.lines;
         const baseX = paddingX + (widthPx - paddingX * 2) * companyConfig.anchorX;
         const baseY = paddingY + (heightPx - paddingY * 2) * companyConfig.anchorY;
