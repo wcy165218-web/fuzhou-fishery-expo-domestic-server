@@ -189,7 +189,8 @@ export function normalizeLabelStyle(rawStyle, widthPx, heightPx) {
     };
     return {
         boothNo: normalizeBlock('boothNo'),
-        company: normalizeBlock('company')
+        company: normalizeBlock('company'),
+        companyTextOverride: String(parsed?.companyTextOverride || '').trim().slice(0, 80)
     };
 }
 

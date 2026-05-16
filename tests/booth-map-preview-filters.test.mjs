@@ -278,6 +278,7 @@ function testPreviewSearchCanClearHighlight() {
   document.getElementById('booth-map-preview-search-input').value = '2b01';
   window.searchBoothMapPreviewItem();
   assert.equal(window.getBoothMapState().previewSearchHighlightItemId, '201');
+  assert.match(window.renderBoothMapItem(context.currentBoothMapItems[0], 'preview'), /booth-map-preview-search-marker/);
 
   window.clearBoothMapPreviewSearch();
   assert.equal(window.getBoothMapState().previewSearchHighlightItemId, '');
@@ -313,6 +314,29 @@ function testJointCompanyNamesUseSeparateEllipsizedLines() {
   );
   assert.match(markup, /福州海洋科技有限公司/);
   assert.match(markup, /厦门远洋渔业发展有限公司/);
+
+  const overrideMarkup = window.renderBoothMapItemText(
+    {
+      id: 302,
+      booth_code: '3C02',
+      booth_type: '标摊',
+      shape_type: 'rect',
+      width_m: 3,
+      height_m: 3,
+      label_style: { companyTextOverride: '福建水产展团' }
+    },
+    220,
+    90,
+    {
+      company_text: '福州海洋科技有限公司\n厦门远洋渔业发展有限公司',
+      company_names: ['福州海洋科技有限公司', '厦门远洋渔业发展有限公司']
+    },
+    'preview',
+    { canvas_width: 800, canvas_height: 600, display_config: {} },
+    'clip-override'
+  );
+  assert.match(overrideMarkup, /福建水产展团/);
+  assert.doesNotMatch(overrideMarkup, /福州海洋科技有限公司/);
 }
 
 function testBoothNumberUsesFixedWidthBottomLeftLayout() {

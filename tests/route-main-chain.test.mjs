@@ -70,6 +70,10 @@ function jsonRequest(url, body) {
     });
 }
 
+function getRequest(url) {
+    return new Request(url, { method: 'GET' });
+}
+
 const CORS = { 'Content-Type': 'application/json' };
 const ADMIN = { role: 'admin', name: 'admin' };
 const MANAGER = { role: 'admin', name: 'manager01' };
@@ -1192,6 +1196,124 @@ async function testChangeOrderBoothPreserveFinanceRequiresSuperAdmin() {
 }
 
 // ---------------------------------------------------------------------------
+// order booth change history tests
+// ---------------------------------------------------------------------------
+
+async function testGetOrderBoothChangesAdminCanReadAnyOrder() {
+    const db = createMockEnv({
+        firstResponses: {
+            'FROM Orders': { id: 101 }
+        },
+        allResponses: {
+            'FROM OrderBoothChanges': {
+                results: [
+                    {
+                        id: 5,
+                        project_id: 7,
+                        order_id: 101,
+                        old_booth_id: '1A01',
+                        new_booth_id: '1A02',
+                        old_area: 9,
+                        new_area: 18,
+                        booth_delta_count: 1,
+                        old_total_amount: 5000,
+                        new_total_amount: 9000,
+                        total_amount_delta: 4000,
+                        changed_by: 'manager01',
+                        reason: '换展位：客户要求；价格说明：老客户优惠',
+                        changed_at: '2026-05-15 10:00:00'
+                    }
+                ]
+            }
+        }
+    });
+    const req = getRequest('http://localhost/api/order-booth-changes?projectId=7&orderId=101');
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: MANAGER, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(body.items[0].reason, '换展位：客户要求；价格说明：老客户优惠');
+    assert.equal(body.items[0].old_booth_id, '1A01');
+    assert.equal(body.items[0].new_booth_id, '1A02');
+    assert.equal(body.items[0].total_amount_delta, 4000);
+    const historyCall = db.captured.prepareCalls.find((call) => call.type === 'all' && call.sql.includes('FROM OrderBoothChanges'));
+    assert.ok(historyCall);
+    assert.deepEqual(historyCall.params, [7, 101]);
+    assert.match(historyCall.sql, /ORDER BY datetime\(changed_at\) DESC, id DESC/);
+    assert.match(historyCall.sql, /LIMIT 100/);
+}
+
+async function testGetOrderBoothChangesSalesCanReadOwnOrder() {
+    const db = createMockEnv({
+        firstResponses: {
+            'FROM Orders': (sql) => {
+                if (sql.includes('WHERE id = ? AND project_id = ?')) return { id: 101 };
+                if (sql.includes('SELECT sales_name')) return { sales_name: '张三' };
+                return null;
+            }
+        },
+        allResponses: {
+            'FROM OrderBoothChanges': {
+                results: [
+                    {
+                        id: 6,
+                        project_id: 7,
+                        order_id: 101,
+                        old_booth_id: '1A02',
+                        new_booth_id: '1A03',
+                        old_area: 18,
+                        new_area: 9,
+                        booth_delta_count: -1,
+                        old_total_amount: 9000,
+                        new_total_amount: 5000,
+                        total_amount_delta: -4000,
+                        changed_by: '张三',
+                        reason: '换展位：客户缩减面积',
+                        changed_at: '2026-05-16 09:00:00'
+                    }
+                ]
+            }
+        }
+    });
+    const req = getRequest('http://localhost/api/order-booth-changes?projectId=7&orderId=101');
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: SALES, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0].reason, '换展位：客户缩减面积');
+}
+
+async function testGetOrderBoothChangesSalesCannotReadOtherOrder() {
+    const db = createMockEnv({
+        firstResponses: {
+            'FROM Orders': (sql) => {
+                if (sql.includes('WHERE id = ? AND project_id = ?')) return { id: 101 };
+                if (sql.includes('SELECT sales_name')) return { sales_name: '李四' };
+                return null;
+            }
+        }
+    });
+    const req = getRequest('http://localhost/api/order-booth-changes?projectId=7&orderId=101');
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: SALES, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(res.status, 403);
+    assert.ok(body.error.includes('权限不足'));
+    assert.equal(db.captured.prepareCalls.some((call) => call.type === 'all' && call.sql.includes('FROM OrderBoothChanges')), false);
+}
+
+async function testGetOrderBoothChangesMissingOrder() {
+    const db = createMockEnv({
+        firstResponses: {
+            'FROM Orders': null
+        }
+    });
+    const req = getRequest('http://localhost/api/order-booth-changes?projectId=7&orderId=404');
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: MANAGER, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(res.status, 404);
+    assert.ok(body.error.includes('订单不存在'));
+}
+
+// ---------------------------------------------------------------------------
 // pending-order handling tests
 // ---------------------------------------------------------------------------
 
@@ -1485,6 +1607,12 @@ async function runTests() {
     await testChangeOrderBoothUsesExplicitDisplayNameWhenInheritanceFails();
     await testChangeOrderBoothPreserveFinanceRequiresSuperAdmin();
 
+    // order booth change history
+    await testGetOrderBoothChangesAdminCanReadAnyOrder();
+    await testGetOrderBoothChangesSalesCanReadOwnOrder();
+    await testGetOrderBoothChangesSalesCannotReadOtherOrder();
+    await testGetOrderBoothChangesMissingOrder();
+
     // pending-order handling
     await testDeletePendingOrderWithPaymentsAllowedForSuperAdmin();
     await testDeletePendingOrderWithoutPaymentsFullyDeletes();
@@ -1501,4 +1629,4 @@ async function runTests() {
 }
 
 await runTests();
-console.log('Route main-chain regression tests passed (39 cases)');
+console.log('Route main-chain regression tests passed (43 cases)');

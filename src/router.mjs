@@ -112,6 +112,7 @@ const ROUTE_GROUPS = [
         matches: exactPath([
             '/api/orders',
             '/api/pending-orders',
+            '/api/order-booth-changes',
             '/api/submit-order',
             '/api/update-customer-info',
             '/api/change-order-booth',

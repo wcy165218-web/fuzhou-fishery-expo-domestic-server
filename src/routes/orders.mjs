@@ -1,4 +1,4 @@
-import { canManageOrder, canViewSensitiveOrderFields, isAdminUser, isSuperAdmin } from '../utils/auth.mjs';
+import { canManageOrder, canViewOrderCommercialNotes, canViewSensitiveOrderFields, isAdminUser, isSuperAdmin } from '../utils/auth.mjs';
 import {
     countDisplayNameUnits,
     findActiveAgentByName,
@@ -347,6 +347,52 @@ export async function handleOrderRoutes({
     currentUser,
     corsHeaders
 }) {
+    if (url.pathname === '/api/order-booth-changes' && request.method === 'GET') {
+        try {
+            const params = new URL(request.url).searchParams;
+            const projectId = Number(params.get('projectId') || 0);
+            const orderId = Number(params.get('orderId') || 0);
+            if (!projectId || !orderId) return errorResponse('缺少订单变更记录查询参数', 400, corsHeaders);
+
+            const order = await env.DB.prepare(`
+                SELECT id
+                FROM Orders
+                WHERE id = ? AND project_id = ?
+            `).bind(orderId, projectId).first();
+            if (!order) return errorResponse('订单不存在', 404, corsHeaders);
+
+            const hasPermission = await canViewOrderCommercialNotes(env, currentUser, orderId);
+            if (!hasPermission) return errorResponse('权限不足：不能查看他人订单说明', 403, corsHeaders);
+
+            const results = await env.DB.prepare(`
+                SELECT
+                    id,
+                    project_id,
+                    order_id,
+                    old_booth_id,
+                    new_booth_id,
+                    old_area,
+                    new_area,
+                    booth_delta_count,
+                    old_total_amount,
+                    new_total_amount,
+                    total_amount_delta,
+                    changed_by,
+                    COALESCE(reason, '') AS reason,
+                    changed_at
+                FROM OrderBoothChanges
+                WHERE project_id = ? AND order_id = ?
+                ORDER BY datetime(changed_at) DESC, id DESC
+                LIMIT 100
+            `).bind(projectId, orderId).all();
+
+            return new Response(JSON.stringify({ items: results.results || [] }), { headers: corsHeaders });
+        } catch (error) {
+            console.error('Fetch order booth changes failed:', error);
+            return internalErrorResponse(corsHeaders);
+        }
+    }
+
     if (url.pathname === '/api/orders' && request.method === 'GET') {
         const filters = normalizeOrderListParams(new URL(request.url), currentUser);
         if (!filters.projectId) return errorResponse('缺少项目 ID', 400, corsHeaders);
@@ -366,6 +412,7 @@ export async function handleOrderRoutes({
         const effectivePage = total > 0 ? Math.min(filters.page, totalPages) : 1;
         const offset = (effectivePage - 1) * filters.pageSize;
         const superAdminFlag = isSuperAdmin(currentUser) ? 1 : 0;
+        const commercialNotesFlag = isAdminUser(currentUser) ? 1 : 0;
         const whereClauses = ['o.project_id = ?'];
         const filterParams = [filters.projectId];
         appendOrderListFilters(whereClauses, filterParams, filters, currentUser);
@@ -375,6 +422,8 @@ export async function handleOrderRoutes({
                 o.*,
                 b.hall,
                 b.type AS booth_type,
+                CASE WHEN ? = 1 OR o.sales_name = ? THEN 1 ELSE 0 END AS can_view_commercial_notes,
+                CASE WHEN ? = 1 OR o.sales_name = ? THEN COALESCE(o.discount_reason, '') ELSE '' END AS visible_discount_reason,
                 CASE WHEN ? = 1 OR o.sales_name = ? THEN 1 ELSE 0 END AS can_manage,
                 CASE WHEN ? = 1 OR o.sales_name = ? THEN 1 ELSE 0 END AS can_preview_contract,
                 CASE WHEN o.contract_url IS NOT NULL AND o.contract_url != '' THEN 1 ELSE 0 END AS has_contract,
@@ -419,6 +468,8 @@ export async function handleOrderRoutes({
             ORDER BY CASE WHEN o.sales_name = ? THEN 0 ELSE 1 END ASC, datetime(o.created_at) DESC, o.id DESC
             LIMIT ? OFFSET ?
         `).bind(
+            commercialNotesFlag, currentUser.name,
+            commercialNotesFlag, currentUser.name,
             superAdminFlag, currentUser.name,
             superAdminFlag, currentUser.name,
             superAdminFlag, currentUser.name,
@@ -432,7 +483,11 @@ export async function handleOrderRoutes({
         ).all();
 
         // Post-process multi-booth orders: derive merged hall and booth_type
-        const orderItems = results.results || [];
+        const orderItems = (results.results || []).map((order) => {
+            order.discount_reason = String(order.visible_discount_reason || '');
+            delete order.visible_discount_reason;
+            return order;
+        });
         const multiBoothOrders = orderItems.filter((o) => o.booth_id && o.booth_id.includes(',') && (!o.hall || !o.booth_type));
         if (multiBoothOrders.length > 0) {
             const allBoothIds = new Set();
@@ -484,6 +539,7 @@ export async function handleOrderRoutes({
         const effectivePage = total > 0 ? Math.min(filters.page, totalPages) : 1;
         const offset = (effectivePage - 1) * filters.pageSize;
         const superAdminFlag = isSuperAdmin(currentUser) ? 1 : 0;
+        const commercialNotesFlag = isAdminUser(currentUser) ? 1 : 0;
         const whereClauses = ['o.project_id = ?'];
         const filterParams = [filters.projectId];
         appendPendingOrderListFilters(whereClauses, filterParams, filters);
@@ -491,6 +547,8 @@ export async function handleOrderRoutes({
         const results = await env.DB.prepare(`
             SELECT
                 o.*,
+                CASE WHEN ? = 1 OR o.sales_name = ? THEN 1 ELSE 0 END AS can_view_commercial_notes,
+                CASE WHEN ? = 1 OR o.sales_name = ? THEN COALESCE(o.discount_reason, '') ELSE '' END AS visible_discount_reason,
                 CASE WHEN ? = 1 OR o.sales_name = ? THEN 1 ELSE 0 END AS can_manage,
                 CASE WHEN o.contract_url IS NOT NULL AND o.contract_url != '' THEN 1 ELSE 0 END AS has_contract,
                 CASE
@@ -521,6 +579,8 @@ export async function handleOrderRoutes({
             ORDER BY CASE WHEN o.sales_name = ? THEN 0 ELSE 1 END ASC, datetime(o.pending_at) DESC, o.id DESC
             LIMIT ? OFFSET ?
         `).bind(
+            commercialNotesFlag, currentUser.name,
+            commercialNotesFlag, currentUser.name,
             superAdminFlag, currentUser.name,
             superAdminFlag, currentUser.name,
             superAdminFlag, currentUser.name,
@@ -531,9 +591,14 @@ export async function handleOrderRoutes({
             filters.pageSize,
             offset
         ).all();
+        const orderItems = (results.results || []).map((order) => {
+            order.discount_reason = String(order.visible_discount_reason || '');
+            delete order.visible_discount_reason;
+            return order;
+        });
 
         return new Response(JSON.stringify({
-            items: results.results || [],
+            items: orderItems,
             total,
             page: effectivePage,
             pageSize: filters.pageSize,

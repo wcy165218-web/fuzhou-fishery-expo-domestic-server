@@ -599,6 +599,11 @@ window.canViewSensitiveOrderFields = function(order, user = null) {
     return !!order && (!!window.isSuperAdmin?.(authUser) || window.isOwnOrder(order, authUser));
 }
 
+window.canViewOrderCommercialNotes = function(order, user = null) {
+    const authUser = getOrderAuthUser(user);
+    return !!order && !!authUser && (!!window.isAdminUser?.(authUser) || window.isOwnOrder(order, authUser) || Number(order.can_view_commercial_notes || 0) === 1);
+}
+
 window.canManageOrder = function(order, user = null) {
     const authUser = getOrderAuthUser(user);
     return !!order && !!authUser && (!!window.isSuperAdmin?.(authUser) || Number(order.can_manage) === 1);
