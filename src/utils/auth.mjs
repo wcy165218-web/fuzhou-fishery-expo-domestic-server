@@ -80,6 +80,12 @@ export async function canViewSensitiveOrderFields(env, currentUser, orderId) {
     return !!order && order.sales_name === currentUser?.name;
 }
 
+export async function canViewOrderCommercialNotes(env, currentUser, orderId) {
+    if (isAdminUser(currentUser)) return true;
+    const order = await getOrderSalesOwner(env, orderId);
+    return !!order && order.sales_name === currentUser?.name;
+}
+
 export async function canHandleOverpayment(env, currentUser, orderId) {
     if (isSuperAdmin(currentUser)) return true;
     const order = await getOrderSalesOwner(env, orderId);

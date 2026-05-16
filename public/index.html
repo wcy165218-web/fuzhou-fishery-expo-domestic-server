@@ -907,7 +907,19 @@
                     <div id="dt-view-category-group"><span class="text-gray-500 block mb-1">产品分类</span><span class="font-bold text-gray-800" id="dt-category"></span></div>
                     <div id="dt-view-business-group"><span class="text-gray-500 flex items-center gap-2 mb-1">详细展品<span id="dt-business-origin" class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold">默认</span></span><span class="font-bold text-gray-800" id="dt-business"></span></div>
                     <div id="dt-view-profile-group" class="col-span-2"><span class="text-gray-500 flex items-center gap-2 mb-1">企业简介或产品亮点<span id="dt-profile-origin" class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold">默认</span></span><div class="bg-gray-50 p-3 rounded border text-gray-700 leading-relaxed whitespace-pre-wrap" id="dt-profile"></div></div>
+                    <div id="dt-discount-reason-wrap" class="col-span-2 border-t pt-3">
+                        <span class="text-gray-500 block mb-1">价格/优惠说明</span>
+                        <div class="bg-amber-50 border border-amber-100 rounded px-3 py-2 text-amber-900 leading-relaxed whitespace-pre-wrap" id="dt-discount-reason">未填写</div>
+                    </div>
                     <div id="dt-view-agent-group" class="col-span-2 border-t pt-3"><span class="text-gray-500 block mb-1">招展渠道情况</span><span class="badge-warning" id="dt-agent"></span></div>
+                </div>
+
+                <div id="dt-booth-change-history-wrap" class="hidden rounded border border-slate-200 bg-slate-50 p-4">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                        <div class="font-bold text-slate-800">展位变更记录</div>
+                        <div class="text-xs text-slate-500">最近 100 条</div>
+                    </div>
+                    <div id="dt-booth-change-history-list" class="space-y-2 text-sm text-slate-600">加载中...</div>
                 </div>
 
                 <div id="dt-edit-mode" class="hidden grid grid-cols-2 gap-y-4 gap-x-6 bg-slate-50 p-4 rounded border border-slate-200">
@@ -2478,6 +2490,24 @@
                                         <label class="booth-map-field-label">当前选中数量</label>
                                         <input type="text" id="bm-field-selection-count" class="w-full border px-3 py-2.5 rounded-xl bg-slate-100" readonly>
                                     </div>
+                                    <div class="booth-map-collapsible rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-4">
+                                        <button type="button" class="booth-map-collapsible-btn" onclick="window.toggleBoothMapCompanyDisplayTools()">
+                                            <span>图上显示企业名</span>
+                                            <span id="booth-map-company-display-toggle-text">展开</span>
+                                        </button>
+                                        <div id="booth-map-company-display-tools" class="booth-map-collapsible-body hidden mt-4 space-y-3">
+                                            <div>
+                                                <label class="booth-map-field-label">当前订单企业</label>
+                                                <div id="bm-field-runtime-company-list" class="rounded-xl border border-cyan-100 bg-white px-3 py-2 text-xs text-slate-600 leading-6">选择展位后显示</div>
+                                            </div>
+                                            <div>
+                                                <label class="booth-map-field-label">覆盖显示名</label>
+                                                <textarea id="bm-field-company-text-override" class="w-full border px-3 py-2.5 rounded-xl bg-white text-sm leading-6" rows="2" maxlength="80" placeholder="留空则按订单企业名显示；可填“某某展团”等短名称" oninput="window.updateSelectedBoothMapCompanyTextOverride(this.value)"></textarea>
+                                                <div class="mt-1 text-[11px] text-slate-500">保存当前展位后生效；不会修改订单企业名或订单简称。</div>
+                                            </div>
+                                            <button type="button" onclick="window.clearSelectedBoothMapCompanyTextOverride()" class="btn-secondary px-3 py-2 text-sm">清除覆盖名</button>
+                                        </div>
+                                    </div>
                                     <div class="grid grid-cols-2 gap-2">
                                         <button id="btn-save-selected-booth-map-item" type="button" onclick="window.saveSelectedBoothMapItem()" class="btn-soft-primary px-3 py-2 text-sm">保存当前展位</button>
                                         <button type="button" onclick="window.deleteSelectedBoothMapItem()" class="btn-soft-danger px-3 py-2 text-sm">删除展位</button>
@@ -2512,10 +2542,10 @@
                                         </div>
                                         <div>
                                             <label class="booth-map-field-label">快速定位</label>
-                                            <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
-                                                <input type="search" id="booth-map-preview-search-input" class="w-full border px-3 py-2.5 rounded-xl bg-white font-bold" placeholder="搜索展位号 / 企业名" onkeydown="if(event.key==='Enter') window.searchBoothMapPreviewItem()">
-                                                <button type="button" onclick="window.searchBoothMapPreviewItem()" class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap">定位</button>
-                                                <button type="button" onclick="window.clearBoothMapPreviewSearch()" class="btn-secondary px-3 py-2.5 text-sm whitespace-nowrap">清除</button>
+                                            <div class="flex max-w-xl flex-wrap items-center gap-1.5">
+                                                <input type="search" id="booth-map-preview-search-input" class="min-w-[180px] flex-1 border px-2.5 py-1.5 rounded-lg bg-white text-sm font-semibold" placeholder="展位号 / 企业名" onkeydown="if(event.key==='Enter') window.searchBoothMapPreviewItem()">
+                                                <button type="button" onclick="window.searchBoothMapPreviewItem()" class="btn-secondary px-2.5 py-1.5 text-xs whitespace-nowrap">定位</button>
+                                                <button type="button" onclick="window.clearBoothMapPreviewSearch()" class="btn-secondary px-2.5 py-1.5 text-xs whitespace-nowrap">清除</button>
                                             </div>
                                             <div id="booth-map-preview-search-result" class="mt-2 text-xs font-bold text-slate-500">可按展位号或订单企业名快速定位。</div>
                                         </div>

@@ -41,6 +41,7 @@ window.boothMapEditor = window.boothMapEditor || {
     removedPersistedCodes: [],
     presetDragKey: '',
     alignToolsExpanded: false,
+    companyDisplayToolsExpanded: false,
     previewTextRulesExpanded: false,
     previewPointerMode: '',
     previewPointerStartClient: null,
@@ -254,6 +255,14 @@ window.initializeBoothMapItemsState = function(items = []) {
 
 window.cloneBoothMapLabelStyle = function(labelStyle) {
     return JSON.parse(JSON.stringify(labelStyle || {}));
+}
+
+window.normalizeBoothMapCompanyTextOverride = function(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+}
+
+window.getBoothMapCompanyTextOverride = function(item) {
+    return window.normalizeBoothMapCompanyTextOverride(item?.label_style?.companyTextOverride || '');
 }
 
 window.getBoothMapItemSizePx = function(item) {
@@ -622,6 +631,7 @@ window.getBoothMapPreviewSearchFields = function(item) {
     const fields = [
         item?.booth_code,
         window.normalizeBoothCode(item?.booth_code),
+        window.getBoothMapCompanyTextOverride(item),
         runtimeItem?.booth_code,
         runtimeItem?.booth_no_text,
         runtimeItem?.company_text,
@@ -669,7 +679,7 @@ window.getBoothMapPreviewSearchResultText = function(item) {
     if (!item) return '';
     const runtimeItem = window.getBoothMapRuntimeItem(item.booth_code);
     const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
-    const companyName = String(runtimeItem?.company_text || orderSummaries[0]?.company_name || '').trim().replace(/\s*\n+\s*/g, '、');
+    const companyName = String(window.getBoothMapCompanyTextOverride(item) || runtimeItem?.company_text || orderSummaries[0]?.company_name || '').trim().replace(/\s*\n+\s*/g, '、');
     const boothCode = window.normalizeBoothCode(item.booth_code);
     return companyName ? `${boothCode}｜${companyName}` : boothCode;
 }
@@ -732,7 +742,8 @@ window.normalizeBoothMapLabelStyle = function(labelStyle, widthPx, heightPx) {
     };
     return {
         boothNo: normalizeBlock('boothNo'),
-        company: normalizeBlock('company')
+        company: normalizeBlock('company'),
+        companyTextOverride: window.normalizeBoothMapCompanyTextOverride(safeStyle.companyTextOverride)
     };
 }
 
@@ -1880,6 +1891,15 @@ window.toggleBoothMapAlignTools = function() {
     if (textEl) textEl.innerText = state.alignToolsExpanded ? '收起' : '展开';
 }
 
+window.toggleBoothMapCompanyDisplayTools = function() {
+    const state = window.getBoothMapState();
+    state.companyDisplayToolsExpanded = !state.companyDisplayToolsExpanded;
+    const bodyEl = document.getElementById('booth-map-company-display-tools');
+    const textEl = document.getElementById('booth-map-company-display-toggle-text');
+    bodyEl?.classList.toggle('hidden', !state.companyDisplayToolsExpanded);
+    if (textEl) textEl.innerText = state.companyDisplayToolsExpanded ? '收起' : '展开';
+}
+
 window.handleBoothMapPresetDragStart = function(event, presetKey) {
     const state = window.getBoothMapState();
     state.presetDragKey = String(presetKey || '').trim();
@@ -2264,8 +2284,9 @@ window.focusBoothMapViewBoxOnItem = function(item, target = 'editor', options = 
     let nextHeight = baseViewBox.height;
 
     if (options.zoomToItem) {
-        nextWidth = Math.max(bounds.width * 4.5, 240);
-        nextHeight = Math.max(bounds.height * 4.5, 180);
+        const zoomPaddingMultiplier = Number(options.zoomPaddingMultiplier || 4.5);
+        nextWidth = Math.max(bounds.width * zoomPaddingMultiplier, Number(options.minWidth || 240));
+        nextHeight = Math.max(bounds.height * zoomPaddingMultiplier, Number(options.minHeight || 180));
         if ((nextWidth / Math.max(nextHeight, 1)) > aspectRatio) {
             nextHeight = nextWidth / Math.max(aspectRatio, 0.1);
         } else {
@@ -2929,6 +2950,10 @@ window.populateBoothMapPropertyPanel = function() {
     const metaEl = document.getElementById('booth-map-selection-meta');
     const openingWrap = document.getElementById('bm-field-opening-wrap');
     const snapToggleEl = document.getElementById('bm-toggle-snap');
+    const runtimeCompanyListEl = document.getElementById('bm-field-runtime-company-list');
+    const companyOverrideEl = document.getElementById('bm-field-company-text-override');
+    const companyToolsBodyEl = document.getElementById('booth-map-company-display-tools');
+    const companyToolsTextEl = document.getElementById('booth-map-company-display-toggle-text');
     const canEditSingle = selectedItems.length === 1;
     const orderLocked = !!item && window.isBoothMapItemOrderLocked(item);
     const selectionCount = selectedItems.length;
@@ -2949,6 +2974,9 @@ window.populateBoothMapPropertyPanel = function() {
             : 'btn-secondary w-full px-3 py-2.5 text-sm justify-center';
     }
     ['bm-field-code', 'bm-field-type', 'bm-field-opening', 'bm-field-width', 'bm-field-height'].forEach((id) => setDisabled(id, !canEditSingle));
+    setDisabled('bm-field-company-text-override', !canEditSingle);
+    companyToolsBodyEl?.classList.toggle('hidden', !window.getBoothMapState().companyDisplayToolsExpanded);
+    if (companyToolsTextEl) companyToolsTextEl.innerText = window.getBoothMapState().companyDisplayToolsExpanded ? '收起' : '展开';
 
     if (!item) {
         if (titleEl) titleEl.innerText = selectionCount > 1 ? `已选择 ${selectionCount} 个展位` : '未选择展位';
@@ -2957,7 +2985,8 @@ window.populateBoothMapPropertyPanel = function() {
                 ? '可以拖动整组展位移动位置，并使用上方对齐工具快速整理布局。'
                 : '单击可单选，按住 Shift 可多选，拖拽空白区域可框选。';
         }
-        ['bm-field-code', 'bm-field-type', 'bm-field-opening', 'bm-field-width', 'bm-field-height', 'bm-field-area'].forEach((id) => setValue(id, ''));
+        ['bm-field-code', 'bm-field-type', 'bm-field-opening', 'bm-field-width', 'bm-field-height', 'bm-field-area', 'bm-field-company-text-override'].forEach((id) => setValue(id, ''));
+        if (runtimeCompanyListEl) runtimeCompanyListEl.innerText = selectionCount > 1 ? '当前选择了多个展位，请单选后编辑显示名。' : '选择展位后显示。';
         if (openingWrap) openingWrap.classList.remove('hidden');
         window.updateBoothMapSaveSummary();
         return;
@@ -2976,6 +3005,17 @@ window.populateBoothMapPropertyPanel = function() {
     setValue('bm-field-width', item.width_m || '');
     setValue('bm-field-height', item.height_m || '');
     setValue('bm-field-area', item.area || '');
+    setValue('bm-field-company-text-override', window.getBoothMapCompanyTextOverride(item));
+    if (runtimeCompanyListEl) {
+        const runtimeItem = window.getBoothMapRuntimeItem(item.booth_code);
+        const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
+        const companyNames = orderSummaries
+            .map((order) => String(order?.company_name || '').trim())
+            .filter(Boolean);
+        runtimeCompanyListEl.innerHTML = companyNames.length
+            ? companyNames.map((name) => `<div>${window.escapeBoothMapText(name)}</div>`).join('')
+            : '<span class="text-slate-400">当前展位暂无订单企业；覆盖显示名可预先保存。</span>';
+    }
     if (openingWrap) {
         openingWrap.classList.toggle('hidden', String(item.booth_type || '') === '光地');
     }
@@ -3040,6 +3080,23 @@ window.updateSelectedBoothMapField = function(field, value) {
     item._dirty = true;
     window.setBoothMapDirty(true);
     window.renderCurrentBoothMap();
+}
+
+window.updateSelectedBoothMapCompanyTextOverride = function(value) {
+    const selectedItems = window.getSelectedBoothMapItems();
+    if (selectedItems.length !== 1) return;
+    const item = selectedItems[0];
+    if (!item) return;
+    const { widthPx, heightPx } = window.getBoothMapItemSizePx(item);
+    item.label_style = window.normalizeBoothMapLabelStyle(item.label_style || {}, widthPx, heightPx);
+    item.label_style.companyTextOverride = window.normalizeBoothMapCompanyTextOverride(value);
+    item._dirty = true;
+    window.setBoothMapDirty(true);
+    window.renderCurrentBoothMap();
+}
+
+window.clearSelectedBoothMapCompanyTextOverride = function() {
+    window.updateSelectedBoothMapCompanyTextOverride('');
 }
 
 window.updateSelectedLabelStyle = function(blockKey, field, value) {
@@ -3204,13 +3261,17 @@ window.searchCurrentBoothMapItem = function() {
     window.showToast(`已定位到展位：${matchedItem.booth_code}`);
 }
 
-window.searchBoothMapPreviewItem = function() {
+window.searchBoothMapPreviewItem = async function() {
     if (!currentBoothMap) return window.showToast('请先选择一个画布', 'error');
     const state = window.getBoothMapState();
     const inputEl = document.getElementById('booth-map-preview-search-input');
     const keyword = String(inputEl?.value || '').trim();
     if (!keyword) return window.showToast('请输入展位号或企业名', 'error');
-    const matched = window.findBoothMapPreviewSearchMatch(keyword);
+    let matched = window.findBoothMapPreviewSearchMatch(keyword);
+    if (!matched?.item && currentBoothMapId) {
+        await window.refreshBoothMapRuntime({ silent: true, force: true });
+        matched = window.findBoothMapPreviewSearchMatch(keyword);
+    }
     if (!matched?.item) {
         state.previewSearchHighlightItemId = '';
         state.previewSearchKeyword = keyword;
@@ -3222,9 +3283,15 @@ window.searchBoothMapPreviewItem = function() {
     state.previewSearchKeyword = keyword;
     state.previewHoveredBoothCode = '';
     window.hideBoothMapTooltip?.();
-    window.focusBoothMapViewBoxOnItem(matched.item, 'preview', { zoomToItem: true });
+    window.focusBoothMapViewBoxOnItem(matched.item, 'preview', {
+        zoomToItem: true,
+        zoomPaddingMultiplier: 3.2,
+        minWidth: 160,
+        minHeight: 120
+    });
     window.updateBoothMapPreviewSearchResult(matched.item);
     window.renderCurrentBoothMap();
+    document.getElementById('booth-map-runtime-svg')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     window.showToast(`已定位到：${window.getBoothMapPreviewSearchResultText(matched.item)}`);
 }
 
@@ -3453,9 +3520,10 @@ window.renderBoothMapItemText = function(item, widthPx, heightPx, runtimeItem, m
         fontSize: boothNoFontSize,
         lineHeight: Number((boothNoFontSize * 0.98).toFixed(2))
     };
-    const companyText = mode === 'preview' ? (runtimeItem?.company_text || '') : '';
+    const companyTextOverride = window.getBoothMapCompanyTextOverride(item);
+    const companyText = mode === 'preview' ? (companyTextOverride || runtimeItem?.company_text || '') : '';
     const companyTextLines = String(companyText || '').split(/\n+/).map((name) => name.trim()).filter(Boolean);
-    const jointCompanyNames = mode === 'preview' && Array.isArray(runtimeItem?.company_names)
+    const jointCompanyNames = mode === 'preview' && !companyTextOverride && Array.isArray(runtimeItem?.company_names)
         ? runtimeItem.company_names.map((name) => String(name || '').trim()).filter(Boolean)
         : (companyTextLines.length > 1 ? companyTextLines : []);
     const textMarkup = [];
@@ -3649,6 +3717,35 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
         ? `<clipPath id="${clipPathId}"><rect x="0" y="0" width="${widthPx}" height="${heightPx}"></rect></clipPath>`
         : `<clipPath id="${clipPathId}"><polygon points="${pointsMarkup}"></polygon></clipPath>`;
     const labelMarkup = window.renderBoothMapItemText(item, widthPx, heightPx, runtimeItem, mode, null, clipPathId);
+    const searchMarkerMarkup = mode === 'preview' && isSearchHighlighted
+        ? `
+            <g class="booth-map-preview-search-marker" pointer-events="none">
+                <rect
+                    x="-8"
+                    y="-8"
+                    width="${Number(widthPx + 16).toFixed(2)}"
+                    height="${Number(heightPx + 16).toFixed(2)}"
+                    fill="none"
+                    stroke="#f59e0b"
+                    stroke-width="5"
+                    stroke-dasharray="14 8"
+                    vector-effect="non-scaling-stroke"
+                    rx="3"
+                    ry="3"
+                ></rect>
+                <circle
+                    cx="${centerX.toFixed(2)}"
+                    cy="${centerY.toFixed(2)}"
+                    r="${Math.max(Math.min(widthPx, heightPx) * 0.08, 5).toFixed(2)}"
+                    fill="#f59e0b"
+                    fill-opacity="0.9"
+                    stroke="#ffffff"
+                    stroke-width="3"
+                    vector-effect="non-scaling-stroke"
+                ></circle>
+            </g>
+        `
+        : '';
     const shapeMarkup = String(item.shape_type || 'rect') === 'rect'
         ? `
             <rect
@@ -3682,6 +3779,7 @@ window.renderBoothMapItem = function(item, mode = 'editor') {
         <g data-item-id="${window.escapeBoothMapText(item.id)}"${boothCodeAttr} transform="translate(${Number(item.x || 0)} ${Number(item.y || 0)}) rotate(${Number(item.rotation || 0)} ${centerX} ${centerY})">
             <defs>${clipMarkup}</defs>
             ${shapeMarkup}
+            ${searchMarkerMarkup}
             ${labelMarkup}
             ${handleMarkup}
         </g>

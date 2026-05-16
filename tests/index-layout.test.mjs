@@ -49,6 +49,10 @@ for (const sectionId of expectedSections) {
 assert.ok(html.includes('id="order-region-search"'), 'closed order list should expose a region filter input');
 assert.ok(html.includes('id="order-booth-type-filter"'), 'closed order list should expose a booth type filter');
 assert.ok(html.includes('order-compact-actions-cell'), 'closed order list should expose a compact sticky action column');
+assert.ok(html.includes('id="dt-discount-reason-wrap"'), 'order detail should expose a commercial note container');
+assert.ok(html.includes('id="dt-discount-reason"'), 'order detail should expose a commercial note value');
+assert.ok(html.includes('id="dt-booth-change-history-wrap"'), 'order detail should expose a booth change history container');
+assert.ok(html.includes('id="dt-booth-change-history-list"'), 'order detail should expose a booth change history list');
 assert.ok(!html.includes('id="order-action-toolbar"'), 'closed order list should no longer render the shared action toolbar');
 assert.ok(html.includes('id="btn-refrigerator-rental-mode-no-booth"'), 'refrigerator rental modal should expose a no-booth mode toggle');
 assert.ok(html.includes('id="refrigerator-company-manual-shell"'), 'refrigerator rental modal should expose a manual no-booth input shell');

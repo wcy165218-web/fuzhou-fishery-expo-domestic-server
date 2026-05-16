@@ -1924,6 +1924,97 @@ window.refreshOrderDetailOriginBadges = function(order = {}) {
     window.setOrderDetailOriginBadge('dt-profile-origin', fromExhibitor);
 }
 
+window.renderOrderDetailDiscountReason = function(order = {}) {
+    const wrap = document.getElementById('dt-discount-reason-wrap');
+    const valueEl = document.getElementById('dt-discount-reason');
+    if (!wrap || !valueEl) return;
+    const canView = window.canViewOrderCommercialNotes?.(order);
+    wrap.classList.toggle('hidden', !canView);
+    if (!canView) {
+        valueEl.innerText = '';
+        return;
+    }
+    const reason = String(order.discount_reason || '').trim();
+    valueEl.innerText = reason || '未填写';
+}
+
+window.formatOrderChangeDelta = function(value, suffix = '') {
+    const numericValue = Number(value || 0);
+    if (!Number.isFinite(numericValue) || numericValue === 0) return `0${suffix}`;
+    return `${numericValue > 0 ? '+' : ''}${numericValue.toLocaleString()}${suffix}`;
+}
+
+window.formatOrderChangeMoneyDelta = function(value) {
+    const numericValue = Number(value || 0);
+    if (!Number.isFinite(numericValue) || numericValue === 0) return window.formatCurrency(0);
+    return `${numericValue > 0 ? '+' : '-'}${window.formatCurrency(Math.abs(numericValue))}`;
+}
+
+window.renderOrderBoothChangeHistory = function(items = []) {
+    const list = document.getElementById('dt-booth-change-history-list');
+    if (!list) return;
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) {
+        list.innerHTML = '<div class="rounded bg-white border border-slate-200 px-3 py-3 text-slate-500">暂无展位变更记录</div>';
+        return;
+    }
+    list.innerHTML = rows.map((item) => {
+        const oldBooth = window.escapeHtml(item.old_booth_id || '-');
+        const newBooth = window.escapeHtml(item.new_booth_id || '-');
+        const changedBy = window.escapeHtml(item.changed_by || '-');
+        const changedAt = window.escapeHtml(item.changed_at || '-');
+        const reason = window.escapeHtml(item.reason || '未填写');
+        const oldArea = Number(item.old_area || 0).toLocaleString();
+        const newArea = Number(item.new_area || 0).toLocaleString();
+        const boothDelta = window.formatOrderChangeDelta(item.booth_delta_count, ' 个');
+        const totalDelta = window.formatOrderChangeMoneyDelta(item.total_amount_delta);
+        return `
+            <div class="rounded bg-white border border-slate-200 px-3 py-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="font-bold text-slate-800">${oldBooth} -> ${newBooth}</div>
+                    <div class="text-xs text-slate-500">${changedAt} · ${changedBy}</div>
+                </div>
+                <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-500">
+                    <div>面积：<span class="font-bold text-slate-700">${window.escapeHtml(oldArea)}㎡ -> ${window.escapeHtml(newArea)}㎡</span> <span class="tabular-data">(${window.escapeHtml(boothDelta)})</span></div>
+                    <div>金额变化：<span class="font-bold text-slate-700 tabular-data">${window.escapeHtml(totalDelta)}</span></div>
+                </div>
+                <div class="mt-2 text-xs leading-5 text-slate-600 whitespace-pre-wrap">原因：${reason}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+window.loadOrderBoothChangeHistory = async function(order = {}) {
+    const wrap = document.getElementById('dt-booth-change-history-wrap');
+    const list = document.getElementById('dt-booth-change-history-list');
+    if (!wrap || !list) return;
+    const canView = window.canViewOrderCommercialNotes?.(order);
+    wrap.classList.toggle('hidden', !canView);
+    if (!canView) {
+        list.innerHTML = '';
+        return;
+    }
+    const orderId = Number(order.id || 0);
+    const projectId = Number(order.project_id || document.getElementById('global-project-select')?.value || 0);
+    if (!orderId || !projectId) {
+        list.innerHTML = '<div class="rounded bg-white border border-slate-200 px-3 py-3 text-slate-500">缺少订单信息，无法加载展位变更记录</div>';
+        return;
+    }
+    list.innerHTML = '<div class="rounded bg-white border border-slate-200 px-3 py-3 text-slate-500">加载中...</div>';
+    try {
+        const params = new URLSearchParams({ projectId: String(projectId), orderId: String(orderId) });
+        const payload = await window.readApiJson(
+            await window.apiFetch(`/api/order-booth-changes?${params.toString()}`),
+            '加载展位变更记录失败',
+            { items: [] }
+        );
+        if (String(window.currentViewOrder?.id || '') !== String(orderId)) return;
+        window.renderOrderBoothChangeHistory(payload.items || []);
+    } catch (error) {
+        list.innerHTML = `<div class="rounded bg-white border border-rose-200 px-3 py-3 text-rose-600">${window.escapeHtml(error.message || '加载展位变更记录失败')}</div>`;
+    }
+}
+
 window.showOrderDetail = async function(o) {
     const canManage = window.canManageOrder(o);
     const isSuperAdmin = window.isSuperAdmin();
@@ -1944,6 +2035,8 @@ window.showOrderDetail = async function(o) {
     document.getElementById('dt-profile').innerText = o.profile || '未填';
     document.getElementById('dt-agent').innerText = o.is_agent ? `由代理商 [${o.agent_name}] 代招` : '直招入驻';
     window.refreshOrderDetailOriginBadges(o);
+    window.renderOrderDetailDiscountReason(o);
+    window.loadOrderBoothChangeHistory(o);
     editContactInput.value = o.contact_person;
     editPhoneInput.value = o.phone;
     editContactInput.disabled = !canViewSensitive;
@@ -1994,6 +2087,10 @@ window.showOrderDetail = async function(o) {
 
 window.toggleDetailEditMode = function(isEditing) {
     if (isEditing && !window.canManageOrder(window.currentViewOrder)) return window.showToast('权限不足：不能修改他人客户资料', 'error');
+    const historyWrap = document.getElementById('dt-booth-change-history-wrap');
+    if (historyWrap) {
+        historyWrap.classList.toggle('hidden', !!isEditing || !window.canViewOrderCommercialNotes?.(window.currentViewOrder || {}));
+    }
     if (isEditing) {
         document.getElementById('dt-view-mode').classList.add('hidden');
         document.getElementById('dt-action-view').classList.add('hidden');

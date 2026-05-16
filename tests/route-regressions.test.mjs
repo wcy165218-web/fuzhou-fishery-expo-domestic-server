@@ -35,6 +35,7 @@ function createOrderRouteEnv() {
               return { results: [] };
             }
             captured.allCalls.push({ sql, params: [...this.params] });
+            const canViewCommercialNotes = Number(this.params[0] || 0) === 1 || String(this.params[1] || '') === '张三';
             return {
               results: [
                 {
@@ -43,6 +44,9 @@ function createOrderRouteEnv() {
                   booth_id: '1A01',
                   company_name: '福建海洋科技',
                   sales_name: '张三',
+                  discount_reason: '老客户优惠',
+                  visible_discount_reason: canViewCommercialNotes ? '老客户优惠' : '',
+                  can_view_commercial_notes: canViewCommercialNotes ? 1 : 0,
                   paid_amount: 1000,
                   total_amount: 1000,
                   can_manage: 1,
@@ -283,6 +287,7 @@ async function runTests() {
 
   assert.equal(getApiRouteHandler('/api/orders'), handleOrderRoutes);
   assert.equal(getApiRouteHandler('/api/pending-orders'), handleOrderRoutes);
+  assert.equal(getApiRouteHandler('/api/order-booth-changes'), handleOrderRoutes);
   assert.equal(getApiRouteHandler('/api/prices'), handleBoothRoutes);
   assert.equal(getApiRouteHandler('/api/booth-map-runtime-view'), handleBoothMapRoutes);
   assert.equal(getApiRouteHandler('/api/upload'), handleFileRoutes);
@@ -310,6 +315,8 @@ async function runTests() {
         booth_id: '1A01',
         company_name: '福建海洋科技',
         sales_name: '张三',
+        discount_reason: '老客户优惠',
+        can_view_commercial_notes: 1,
         paid_amount: 1000,
         total_amount: 1000,
         can_manage: 1,
@@ -365,13 +372,16 @@ async function runTests() {
     'http://localhost/api/orders?projectId=7&page=1&pageSize=50',
     { method: 'GET' }
   );
-  await handleOrderRoutes({
+  const salesOrderResponse = await handleOrderRoutes({
     request: salesOrderRequest,
     env: salesOrderEnv,
     url: new URL(salesOrderRequest.url),
     currentUser: { role: 'sales', name: '李四' },
     corsHeaders
   });
+  const salesOrderPayload = await salesOrderResponse.json();
+  assert.equal(salesOrderPayload.items[0].can_view_commercial_notes, 0);
+  assert.equal(salesOrderPayload.items[0].discount_reason, '');
   assert.doesNotMatch(salesOrderEnv.captured.firstCalls[0].sql, /paid_amount >= o\.total_amount/);
   assert.deepEqual(salesOrderEnv.captured.firstCalls[0].params, [7]);
   assert.deepEqual(salesOrderEnv.captured.allCalls[0].params.slice(-3), ['李四', 50, 0]);
@@ -649,6 +659,9 @@ async function runTests() {
           rotation: 0,
           stroke_width: 2,
           shape_type: 'rect',
+          label_style: {
+            companyTextOverride: '福建水产展团'
+          },
           z_index: 1,
           hidden: 0
         }
@@ -667,6 +680,9 @@ async function runTests() {
   assert.equal(orderedBoothMapPayload.success, true);
   assert.equal(orderedBoothMapPayload.synced_order_count, 1);
   const orderedBoothMapStatements = orderedBoothMapEnv.captured.batchCalls.flat();
+  const boothMapItemUpsertCall = orderedBoothMapStatements.find((call) => call.sql.includes('INSERT INTO BoothMapItems'));
+  assert.ok(boothMapItemUpsertCall);
+  assert.equal(JSON.parse(boothMapItemUpsertCall.params[15]).companyTextOverride, '福建水产展团');
   const orderSyncCall = orderedBoothMapStatements.find((call) => call.sql.includes('UPDATE Orders') && call.sql.includes('booth_id = ?'));
   assert.ok(orderSyncCall);
   assert.deepEqual(orderSyncCall.params, ['1A02', 12, '个', 501, 7]);
