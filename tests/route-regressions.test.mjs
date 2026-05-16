@@ -120,7 +120,7 @@ function createConfigRouteEnv(options = {}) {
   };
 }
 
-function createOrderedBoothMapRouteEnv() {
+function createOrderedBoothMapRouteEnv(options = {}) {
   const captured = {
     batchCalls: []
   };
@@ -190,7 +190,9 @@ function createOrderedBoothMapRouteEnv() {
               return { results: [{ booth_code: existingItem.booth_code }] };
             }
             if (sql.includes('SELECT id, booth_id, area, price_unit') && sql.includes('FROM Orders')) {
-              return { results: [{ id: 501, booth_id: '1A01', area: 9, price_unit: '个' }] };
+              return {
+                results: options.activeOrderRows || [{ id: 501, booth_id: '1A01', area: 9, price_unit: '个' }]
+              };
             }
             return { results: [] };
           },
@@ -688,6 +690,53 @@ async function runTests() {
   assert.deepEqual(orderSyncCall.params, ['1A02', 12, '个', 501, 7]);
   assert.equal(orderedBoothMapStatements.some((call) => call.sql.includes('total_booth_fee')), false);
   assert.ok(orderedBoothMapStatements.some((call) => call.sql.includes('UPDATE ExhibitionLintels')));
+
+  const jointBoothMapEnv = createOrderedBoothMapRouteEnv({
+    activeOrderRows: [
+      { id: 501, booth_id: '1A01', area: 9, price_unit: '个' },
+      { id: 502, booth_id: '1A01', area: 0, price_unit: '个' }
+    ]
+  });
+  const jointBoothMapRequest = new Request('http://localhost/api/save-booth-map-items', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: 7,
+      mapId: 3,
+      replaceAll: false,
+      items: [
+        {
+          booth_code: '1A01',
+          previous_booth_code: '1A01',
+          hall: '1号馆',
+          booth_type: '标摊',
+          opening_type: '单开口',
+          width_m: 4,
+          height_m: 3,
+          x: 100,
+          y: 100,
+          rotation: 0,
+          stroke_width: 2,
+          shape_type: 'rect',
+          z_index: 1,
+          hidden: 0
+        }
+      ]
+    })
+  });
+  const jointBoothMapResponse = await handleBoothMapRoutes({
+    request: jointBoothMapRequest,
+    env: jointBoothMapEnv,
+    url: new URL(jointBoothMapRequest.url),
+    currentUser: { role: 'admin', name: 'admin' },
+    corsHeaders
+  });
+  const jointBoothMapPayload = await jointBoothMapResponse.json();
+  assert.equal(jointBoothMapResponse.status, 200);
+  assert.equal(jointBoothMapPayload.success, true);
+  assert.equal(jointBoothMapPayload.synced_order_count, 0);
+  const jointBoothMapStatements = jointBoothMapEnv.captured.batchCalls.flat();
+  assert.equal(jointBoothMapStatements.some((call) => call.sql.includes('UPDATE Orders') && call.sql.includes('area = ?')), false);
 
   const orderedBoothEditRequest = new Request('http://localhost/api/edit-booth', {
     method: 'POST',

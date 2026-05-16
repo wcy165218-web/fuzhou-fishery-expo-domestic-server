@@ -317,6 +317,13 @@ async function buildOrderSyncStatementsForBoothMapSave(env, projectId, normalize
         AND COALESCE(booth_id, '') != ''
     `).bind(Number(projectId)).all()).results || []);
 
+    const activeOrderCountByBoothCode = new Map();
+    activeOrderRows.forEach((order) => {
+        splitBoothCodeList(order.booth_id).forEach((boothId) => {
+            activeOrderCountByBoothCode.set(boothId, (activeOrderCountByBoothCode.get(boothId) || 0) + 1);
+        });
+    });
+
     const affectedOrders = [];
     const missingBoothCodes = new Set();
     activeOrderRows.forEach((order) => {
@@ -347,8 +354,11 @@ async function buildOrderSyncStatementsForBoothMapSave(env, projectId, normalize
             .filter(Boolean);
         if (boothRows.length !== nextBoothIds.length) return;
         const nextBoothId = nextBoothIds.join(', ');
-        const nextArea = roundTo(boothRows.reduce((sum, row) => sum + Number(row.area || 0), 0), 2);
-        const nextPriceUnit = boothRows.length === 1 ? boothRows[0].price_unit : '组合';
+        const hasJointBooth = currentBoothIds.some((boothId) => Number(activeOrderCountByBoothCode.get(boothId) || 0) > 1);
+        const calculatedArea = roundTo(boothRows.reduce((sum, row) => sum + Number(row.area || 0), 0), 2);
+        const calculatedPriceUnit = boothRows.length === 1 ? boothRows[0].price_unit : '组合';
+        const nextArea = hasJointBooth ? roundTo(Number(order.area || 0), 2) : calculatedArea;
+        const nextPriceUnit = hasJointBooth ? String(order.price_unit || calculatedPriceUnit || '') : calculatedPriceUnit;
         const boothChanged = nextBoothId !== splitBoothCodeList(order.booth_id).join(', ');
         const areaChanged = Math.abs(Number(order.area || 0) - nextArea) >= 0.01;
         const priceUnitChanged = String(order.price_unit || '') !== String(nextPriceUnit || '');
