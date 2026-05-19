@@ -731,23 +731,40 @@ export async function buildOrderImportPlan(env, projectId, csvText) {
                     errors.push(`展位 ${boothId} 当前未被占用，不需要标记联合参展，请确认是否填错展位号`);
                     return;
                 }
-                if (existingEntry && boothItem.is_joint && boothItem.area > Number(existingEntry.area || existingEntry.boothItemRef?.area || 0)) {
-                    errors.push(`展位 ${boothId} 联合参展分配面积不能大于当前可分摊面积`);
-                    return;
-                }
                 if (existingEntry && boothItem.is_joint && boothItem.area > 0) {
-                    if (existingEntry.kind === 'db') {
+                    const dbEntry = activeEntries.find((entry) => entry.kind === 'db') || null;
+                    const boothCapacity = Number(boothMap.get(boothId)?.area || 0);
+                    const importedArea = roundTo(
+                        activeEntries
+                            .filter((entry) => entry.kind === 'import' && entry.boothItemRef)
+                            .reduce((sum, entry) => sum + Number(entry.boothItemRef.area || 0), 0),
+                        2
+                    );
+                    if (dbEntry) {
+                        if (Number(boothItem.area || 0) > Number(dbEntry.area || 0)) {
+                            errors.push(`展位 ${boothId} 联合参展分配面积不能大于当前可分摊面积`);
+                            return;
+                        }
                         rowDbAreaAdjustments.set(
-                            existingEntry.id,
-                            roundTo((rowDbAreaAdjustments.get(existingEntry.id) || 0) + Number(boothItem.area || 0), 2)
+                            dbEntry.id,
+                            roundTo((rowDbAreaAdjustments.get(dbEntry.id) || 0) + Number(boothItem.area || 0), 2)
                         );
-                    } else if (existingEntry.kind === 'import' && existingEntry.boothItemRef) {
+                        rowStateMutations.push(() => {
+                            dbEntry.area = roundTo(Number(dbEntry.area || 0) - Number(boothItem.area || 0), 2);
+                        });
+                    } else if (boothCapacity > 0 && importedArea + Number(boothItem.area || 0) <= boothCapacity + 0.009) {
+                        // Same-file collection imports often enter each co-exhibitor's own share.
+                        // In that case, keep the first imported row's area unchanged and only enforce total capacity.
+                    } else if (existingEntry.kind === 'import' && existingEntry.boothItemRef && Number(boothItem.area || 0) <= Number(existingEntry.boothItemRef.area || 0)) {
                         rowStateMutations.push(() => {
                             existingEntry.boothItemRef.area = roundTo(
                                 Number(existingEntry.boothItemRef.area || 0) - Number(boothItem.area || 0),
                                 2
                             );
                         });
+                    } else {
+                        errors.push(`展位 ${boothId} 联合参展分配面积不能大于当前可分摊面积`);
+                        return;
                     }
                 }
                 rowStateMutations.push(() => {

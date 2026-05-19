@@ -236,6 +236,45 @@ async function testPlanAcceptsOccupiedBoothWithJointFlag() {
     assert.equal(plan.dbAreaAdjustments.get(42), 3);
 }
 
+async function testPlanAcceptsSameFileSharedBoothAreaSplit() {
+    const env = createBaseEnv({
+        allResponses: {
+            'SELECT id, hall, type, area, price_unit, base_price': {
+                results: [{ id: '3F27', hall: '3号馆', type: '光地', area: 216, price_unit: '平米', base_price: 1000 }]
+            }
+        }
+    });
+    const rows = ['sales_name,company_name,credit_code,no_code_checked,contact_person,phone,region,category,main_business,profile,is_agent,booth_id,is_joint,booth_display_name,area,total_booth_fee,created_at'];
+    for (let index = 1; index <= 20; index += 1) {
+        rows.push([
+            '张三',
+            `3F27联合企业${index}`,
+            `91350100MA12345${String(index).padStart(3, '0')}`,
+            '0',
+            `联系人${index}`,
+            `1380000${String(index).padStart(4, '0')}`,
+            '福建省 - 福州市 - 鼓楼区',
+            '水产预制菜',
+            '海鲜加工',
+            '企业简介',
+            '直招',
+            '3F27',
+            index === 1 ? '否' : '是',
+            'F27',
+            '10.8',
+            '1000',
+            '2026-03-01 10:00:00'
+        ].join(','));
+    }
+    const plan = await buildOrderImportPlan(env, 7, rows.join('\n'));
+    assert.equal(plan.summary.error_count, 0);
+    assert.equal(plan.summary.success_count, 20);
+    assert.equal(plan.importRows.length, 20);
+    assert.equal(plan.importRows[0].distributed_booths[0].area, 10.8);
+    assert.equal(plan.importRows[19].distributed_booths[0].area, 10.8);
+    assert.equal(plan.dbAreaAdjustments.size, 0);
+}
+
 async function testPlanRejectsJointFlagForUnoccupiedBooth() {
     const env = createBaseEnv();
     const csvText = [
@@ -275,6 +314,7 @@ await testExecuteOrderImportWritesOrders();
 await testPlanWarnsButAllowsExistingCompanyName();
 await testPlanRejectsOccupiedBoothWithoutJointFlag();
 await testPlanAcceptsOccupiedBoothWithJointFlag();
+await testPlanAcceptsSameFileSharedBoothAreaSplit();
 await testPlanRejectsJointFlagForUnoccupiedBooth();
 await testExecuteIgnoresPaidAmountWithWarning();
 
