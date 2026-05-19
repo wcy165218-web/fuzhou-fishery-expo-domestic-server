@@ -287,6 +287,20 @@ function testPreviewSearchCanClearHighlight() {
   assert.equal(getRenderCalls(), 2);
 }
 
+function testCompanyDisplayToolsToggleExpandsPanel() {
+  const { window, document } = createHarness();
+  const bodyEl = document.getElementById('booth-map-company-display-tools');
+  const textEl = document.getElementById('booth-map-company-display-toggle-text');
+  bodyEl.classList.add('hidden');
+  textEl.innerText = '展开';
+
+  window.toggleBoothMapCompanyDisplayTools();
+
+  assert.equal(bodyEl.classList.contains('hidden'), false);
+  assert.equal(textEl.innerText, '收起');
+  assert.equal(window.getBoothMapState().companyDisplayToolsExpanded, true);
+}
+
 function testJointCompanyNamesUseSeparateEllipsizedLines() {
   const { window } = createHarness();
   const compactBlock = window.fitBoothMapJointCompanyBlock(
@@ -550,6 +564,7 @@ testSwitchToLintelModeShowsCorrectFilterGroup();
 testLintelPreviewFiltersDriveVisibilityAndLegend();
 testPreviewSearchLocatesOrderCompanyAndKeepsMatchVisible();
 testPreviewSearchCanClearHighlight();
+testCompanyDisplayToolsToggleExpandsPanel();
 testJointCompanyNamesUseSeparateEllipsizedLines();
 testBoothNumberUsesFixedWidthBottomLeftLayout();
 

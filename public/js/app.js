@@ -1,5 +1,5 @@
 // ================= js/app.js =================
-const LOGIN_MODULE_SRC = './js/auth.js?v=20260513-exhibitor-directory-export-1';
+const LOGIN_MODULE_SRC = './js/auth.js?v=20260519-booth-map-company-display-1';
 let pendingLoginModuleLoad = null;
 
 function loadLoginModuleOnce() {
