@@ -1172,6 +1172,64 @@ async function testSpecialDecorationListFiltersAndSortsGroundOrders() {
   assert.deepEqual(payload.sales_options, ['李四', '张三']);
 }
 
+async function testSpecialDecorationListGroupsJointGroundBoothWhenMapDisplayNameExists() {
+  const env = createMockEnv({
+    allResponses: {
+      'SELECT o.id, o.company_name, o.sales_name, o.booth_id, o.area, o.created_at': {
+        results: [
+          { id: 801, company_name: '福建海产甲公司', sales_name: '张三', booth_id: '4G01', area: 20, created_at: '2026-04-25 10:00:00' },
+          { id: 802, company_name: '福建海产乙公司', sales_name: '李四', booth_id: '4G01', area: 34, created_at: '2026-04-25 10:05:00' },
+          { id: 803, company_name: '福建海产丙公司', sales_name: '王五', booth_id: '4G02', area: 15, created_at: '2026-04-25 10:10:00' },
+          { id: 804, company_name: '福建海产丁公司', sales_name: '赵六', booth_id: '4G02', area: 15, created_at: '2026-04-25 10:15:00' }
+        ]
+      },
+      'SELECT id, hall, type, area': {
+        results: [
+          { id: '4G01', hall: '4号馆', type: '光地', area: 54 },
+          { id: '4G02', hall: '4号馆', type: '光地', area: 30 }
+        ]
+      },
+      'SELECT booth_code, label_style_json': {
+        results: [
+          { booth_code: '4G01', label_style_json: '{"companyTextOverride":"海洋联合展团"}' },
+          { booth_code: '4G02', label_style_json: '{}' }
+        ]
+      },
+      'FROM ExhibitionSpecialDecorationReports': {
+        results: [
+          { id: 91, project_id: 7, order_id: 801, reported: 1, reported_by: 'expo01', reported_at: '2026-04-25 12:00:00', updated_by: 'expo01', created_at: '2026-04-25 12:00:00', updated_at: '2026-04-25 12:00:00' },
+          { id: 92, project_id: 7, order_id: 802, reported: 1, reported_by: 'expo01', reported_at: '2026-04-25 12:01:00', updated_by: 'expo01', created_at: '2026-04-25 12:01:00', updated_at: '2026-04-25 12:01:00' }
+        ]
+      }
+    }
+  });
+  const request = new Request('http://localhost/api/exhibition/special-decorations?projectId=7', { method: 'GET' });
+  const response = await handleExhibitionRoutes({
+    request,
+    env,
+    url: new URL(request.url),
+    currentUser: { role: 'super_admin', name: 'admin' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.total, 3);
+
+  const groupedRow = payload.items.find((row) => row.booth_code === '4G01');
+  assert.ok(groupedRow);
+  assert.equal(groupedRow.company_name, '海洋联合展团');
+  assert.deepEqual(groupedRow.order_ids, [801, 802]);
+  assert.equal(groupedRow.area, 54);
+  assert.equal(groupedRow.report_status, '已报图');
+  assert.equal(groupedRow.display_name_source, 'booth_map_company_text_override');
+  assert.equal(groupedRow.is_joint_display_group, 1);
+
+  const splitRows = payload.items.filter((row) => row.booth_code === '4G02');
+  assert.equal(splitRows.length, 2);
+  assert.deepEqual(splitRows.map((row) => row.company_name).sort(), ['福建海产丁公司', '福建海产丙公司']);
+  assert.deepEqual(splitRows.map((row) => row.area), [30, 30]);
+}
+
 async function testSpecialDecorationListPaginatesTwentyRowsAndScopesAdmin() {
   const orderRows = Array.from({ length: 21 }, (_, index) => ({
     id: 600 + index + 1,
@@ -1331,6 +1389,7 @@ async function run() {
   await testBusinessWithdrawBlockedAfterExhibitionConfirmation();
   await testSuperAdminCanToggleLintelExhibitionConfirmation();
   await testSpecialDecorationListFiltersAndSortsGroundOrders();
+  await testSpecialDecorationListGroupsJointGroundBoothWhenMapDisplayNameExists();
   await testSpecialDecorationListPaginatesTwentyRowsAndScopesAdmin();
   await testExhibitionManagerCanToggleSpecialDecorationReport();
   await testAdminCannotToggleSpecialDecorationReport();
