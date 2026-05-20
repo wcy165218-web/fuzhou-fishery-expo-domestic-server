@@ -1692,13 +1692,28 @@ window.getSelectedSpecialDecorationOrderIds = function() {
         .filter((id) => Number.isInteger(id) && id > 0)));
 };
 
+window.getSpecialDecorationRowKey = function(row) {
+    return String(row?.key || row?.order_id || '');
+};
+
+window.getSpecialDecorationRowOrderIds = function(row) {
+    return Array.from(new Set((Array.isArray(row?.order_ids) && row.order_ids.length ? row.order_ids : [row?.order_id])
+        .map((id) => Number(id || 0))
+        .filter((id) => Number.isInteger(id) && id > 0)));
+};
+
 window.clearSelectedSpecialDecorations = function() {
     window.selectedSpecialDecorationOrderIds = [];
 };
 
 window.getSpecialDecorationRowByOrderId = function(orderId) {
     const normalizedId = Number(orderId || 0);
-    return (Array.isArray(window.exhibitionSpecialDecorations) ? window.exhibitionSpecialDecorations : []).find((row) => Number(row.order_id || 0) === normalizedId) || null;
+    return (Array.isArray(window.exhibitionSpecialDecorations) ? window.exhibitionSpecialDecorations : []).find((row) => window.getSpecialDecorationRowOrderIds(row).includes(normalizedId)) || null;
+};
+
+window.getSpecialDecorationRowByKey = function(rowKey) {
+    const normalizedKey = String(rowKey || '');
+    return (Array.isArray(window.exhibitionSpecialDecorations) ? window.exhibitionSpecialDecorations : []).find((row) => window.getSpecialDecorationRowKey(row) === normalizedKey) || null;
 };
 
 window.syncSpecialDecorationFilterControls = function() {
@@ -1776,7 +1791,7 @@ window.loadSpecialDecorationList = async function(options = {}) {
         can_toggle: !!data?.can_toggle
     };
     window.exhibitionSpecialDecorationFilters = window.normalizeSpecialDecorationFilters({ ...filters, page: window.exhibitionSpecialDecorationMeta.page });
-    const validIds = new Set(window.exhibitionSpecialDecorations.map((item) => Number(item.order_id || 0)).filter((id) => id > 0));
+    const validIds = new Set(window.exhibitionSpecialDecorations.flatMap((item) => window.getSpecialDecorationRowOrderIds(item)));
     window.selectedSpecialDecorationOrderIds = window.getSelectedSpecialDecorationOrderIds().filter((id) => validIds.has(id));
     window.syncSpecialDecorationFilterControls();
     window.renderSpecialDecorationTable();
@@ -1817,14 +1832,13 @@ window.goSpecialDecorationPage = function(page) {
     window.setSpecialDecorationFilters({ page: Number(page || 1) });
 };
 
-window.toggleSpecialDecorationSelection = function(orderId, checked) {
-    const normalizedId = Number(orderId || 0);
-    if (!normalizedId) return;
-    const row = window.getSpecialDecorationRowByOrderId(normalizedId);
+window.toggleSpecialDecorationSelection = function(rowKey, checked) {
+    const row = window.getSpecialDecorationRowByKey(rowKey) || window.getSpecialDecorationRowByOrderId(rowKey);
     if (!row?.can_toggle) return;
+    const rowOrderIds = window.getSpecialDecorationRowOrderIds(row);
     const selected = new Set(window.getSelectedSpecialDecorationOrderIds());
-    if (checked) selected.add(normalizedId);
-    else selected.delete(normalizedId);
+    if (checked) rowOrderIds.forEach((id) => selected.add(id));
+    else rowOrderIds.forEach((id) => selected.delete(id));
     window.selectedSpecialDecorationOrderIds = [...selected];
     window.renderSpecialDecorationTable();
 };
@@ -1833,8 +1847,7 @@ window.toggleAllSpecialDecorationSelections = function(checked) {
     const selected = new Set(window.getSelectedSpecialDecorationOrderIds());
     const selectableIds = (Array.isArray(window.exhibitionSpecialDecorations) ? window.exhibitionSpecialDecorations : [])
         .filter((row) => row?.can_toggle)
-        .map((row) => Number(row.order_id || 0))
-        .filter((id) => id > 0);
+        .flatMap((row) => window.getSpecialDecorationRowOrderIds(row));
     if (checked) selectableIds.forEach((id) => selected.add(id));
     else selectableIds.forEach((id) => selected.delete(id));
     window.selectedSpecialDecorationOrderIds = [...selected];
@@ -1847,7 +1860,7 @@ window.renderSpecialDecorationTable = function() {
     const rows = Array.isArray(window.exhibitionSpecialDecorations) ? window.exhibitionSpecialDecorations : [];
     const selectedIds = new Set(window.getSelectedSpecialDecorationOrderIds());
     const selectableRows = rows.filter((row) => row?.can_toggle);
-    const allSelected = selectableRows.length > 0 && selectableRows.every((row) => selectedIds.has(Number(row.order_id || 0)));
+    const allSelected = selectableRows.length > 0 && selectableRows.every((row) => window.getSpecialDecorationRowOrderIds(row).every((id) => selectedIds.has(id)));
     const columnClassNames = window.getSpecialDecorationTableColumnClassNames();
     window.renderSpecialDecorationToolbar();
     if (!rows.length) {
@@ -1872,7 +1885,9 @@ window.renderSpecialDecorationTable = function() {
                 </thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
                     ${rows.map((row) => {
-                        const orderId = Number(row.order_id || 0);
+                        const rowKey = window.getSpecialDecorationRowKey(row);
+                        const rowOrderIds = window.getSpecialDecorationRowOrderIds(row);
+                        const rowSelected = rowOrderIds.length > 0 && rowOrderIds.every((id) => selectedIds.has(id));
                         const reported = Number(row.reported || 0) === 1;
                         const statusClass = reported ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
                         const buttonLabel = reported ? '撤销报图' : '确认报图';
@@ -1880,7 +1895,7 @@ window.renderSpecialDecorationTable = function() {
                         const areaText = Number(row.area || 0) > 0 ? `${Number(row.area || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} ㎡` : '-';
                         return `
                             <tr class="align-top">
-                                <td class="${columnClassNames.checkbox} text-center align-middle"><input type="checkbox" ${selectedIds.has(orderId) ? 'checked' : ''} ${row.can_toggle ? '' : 'disabled'} onchange="window.toggleSpecialDecorationSelection(${orderId}, this.checked)" class="accent-slate-900"></td>
+                                <td class="${columnClassNames.checkbox} text-center align-middle"><input type="checkbox" ${rowSelected ? 'checked' : ''} ${row.can_toggle ? '' : 'disabled'} onchange='window.toggleSpecialDecorationSelection(${JSON.stringify(rowKey)}, this.checked)' class="accent-slate-900"></td>
                                 <td class="${columnClassNames.sequence} align-middle font-bold text-slate-500">${Number(row.sequence || 0)}</td>
                                 <td class="${columnClassNames.status} align-middle text-center"><span class="inline-flex min-w-[64px] justify-center rounded-full px-2 py-1 text-[10px] font-bold ${statusClass}">${window.escapeHtml(row.report_status || (reported ? '已报图' : '未报图'))}</span></td>
                                 <td class="${columnClassNames.hall} align-middle whitespace-normal break-words font-bold text-slate-700">${window.escapeHtml(row.hall || '-')}</td>
@@ -1889,7 +1904,7 @@ window.renderSpecialDecorationTable = function() {
                                 <td class="${columnClassNames.companyName} align-middle whitespace-normal break-words font-bold text-slate-900">${window.escapeHtml(row.company_name || '-')}</td>
                                 <td class="${columnClassNames.salesName} align-middle whitespace-normal break-words text-slate-700">${window.escapeHtml(row.sales_name || '-')}</td>
                                 <td class="${columnClassNames.action} align-middle sticky right-0 bg-white text-right">
-                                    <button type="button" onclick="window.toggleSingleSpecialDecorationReport(${orderId}, ${reported ? 'false' : 'true'})" class="${buttonClass} px-2.5 py-1.5 text-xs" ${row.can_toggle ? '' : 'disabled'} title="${window.escapeAttr(row.lock_reason || '')}">${row.can_toggle ? buttonLabel : '只读'}</button>
+                                    <button type="button" onclick='window.toggleSingleSpecialDecorationReport(${JSON.stringify(rowKey)}, ${reported ? 'false' : 'true'})' class="${buttonClass} px-2.5 py-1.5 text-xs" ${row.can_toggle ? '' : 'disabled'} title="${window.escapeAttr(row.lock_reason || '')}">${row.can_toggle ? buttonLabel : '只读'}</button>
                                 </td>
                             </tr>
                         `;
@@ -1945,8 +1960,8 @@ window.submitSpecialDecorationReport = async function(orderIds, reported) {
     window.showToast(reported ? '已确认报图' : '已撤销报图');
 };
 
-window.toggleSingleSpecialDecorationReport = async function(orderId, reported) {
-    const row = window.getSpecialDecorationRowByOrderId(orderId);
+window.toggleSingleSpecialDecorationReport = async function(rowKey, reported) {
+    const row = window.getSpecialDecorationRowByKey(rowKey) || window.getSpecialDecorationRowByOrderId(rowKey);
     if (!row) {
         window.showToast('未找到光地企业记录', 'error');
         return;
@@ -1957,7 +1972,7 @@ window.toggleSingleSpecialDecorationReport = async function(orderId, reported) {
     }
     const actionText = reported ? '确认报图' : '撤销报图';
     if (!confirm(`确定要${actionText}【${row.company_name || row.booth_code || '-'}】吗？`)) return;
-    await window.submitSpecialDecorationReport([Number(row.order_id || 0)], reported);
+    await window.submitSpecialDecorationReport(window.getSpecialDecorationRowOrderIds(row), reported);
 };
 
 window.toggleBatchSpecialDecorationReport = async function(reported) {

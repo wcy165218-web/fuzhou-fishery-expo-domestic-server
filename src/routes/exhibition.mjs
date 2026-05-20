@@ -265,6 +265,16 @@ function normalizeSpecialDecorationStatusFilter(value) {
     return 'all';
 }
 
+function safeParseJson(rawValue, fallback) {
+    try {
+        if (rawValue === null || rawValue === undefined || rawValue === '') return fallback;
+        const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+        return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch (error) {
+        return fallback;
+    }
+}
+
 function compareBoothCodeValues(leftValue, rightValue) {
     return normalizeBoothCode(leftValue).localeCompare(normalizeBoothCode(rightValue), 'zh-CN', { numeric: true, sensitivity: 'base' });
 }
@@ -466,6 +476,22 @@ function normalizeSpecialDecorationRecord(record) {
     };
 }
 
+function resolveSpecialDecorationReportState(orderIds = [], recordMap = new Map()) {
+    const normalizedOrderIds = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
+        .map((orderId) => Number(orderId || 0))
+        .filter((orderId) => orderId > 0)));
+    const records = normalizedOrderIds
+        .map((orderId) => normalizeSpecialDecorationRecord(recordMap.get(orderId)))
+        .filter((record) => Number(record.order_id || 0) > 0 || Number(record.id || 0) > 0);
+    const reported = normalizedOrderIds.length > 0
+        && normalizedOrderIds.every((orderId) => normalizeSpecialDecorationRecord(recordMap.get(orderId)).reported === SPECIAL_DECORATION_REPORTED);
+    const latestRecord = records.sort((left, right) => String(right.updated_at || '').localeCompare(String(left.updated_at || '')))[0] || null;
+    return {
+        ...(latestRecord || normalizeSpecialDecorationRecord(null)),
+        reported: reported ? SPECIAL_DECORATION_REPORTED : SPECIAL_DECORATION_UNREPORTED
+    };
+}
+
 function buildSpecialDecorationSourceRow(projectId, orderRow, boothRows = []) {
     const groundBooths = (Array.isArray(boothRows) ? boothRows : [])
         .filter((booth) => isSpecialDecorationBoothType(booth?.type))
@@ -481,10 +507,14 @@ function buildSpecialDecorationSourceRow(projectId, orderRow, boothRows = []) {
         .sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true }));
     const groundArea = roundCurrency(groundBooths.reduce((sum, booth) => sum + Number(booth.area || 0), 0));
     return {
+        key: String(Number(orderRow?.id || 0)),
         project_id: projectId,
         order_id: Number(orderRow?.id || 0),
+        order_ids: [Number(orderRow?.id || 0)].filter((orderId) => orderId > 0),
         company_name: String(orderRow?.company_name || '').trim(),
+        company_names: [String(orderRow?.company_name || '').trim()].filter(Boolean),
         sales_name: String(orderRow?.sales_name || '').trim(),
+        sales_names: [String(orderRow?.sales_name || '').trim()].filter(Boolean),
         booth_codes: groundBooths.map((booth) => booth.id),
         booth_code: groundBooths.map((booth) => booth.id).join(', '),
         sort_booth_code: groundBooths[0]?.id || '',
@@ -492,6 +522,47 @@ function buildSpecialDecorationSourceRow(projectId, orderRow, boothRows = []) {
         hall: hallNames.join('，'),
         area: groundArea > 0 ? groundArea : roundCurrency(orderRow?.area),
         order_created_at: String(orderRow?.created_at || '').trim()
+    };
+}
+
+function buildSpecialDecorationBoothGroupSourceRow(projectId, booth, orderRows = [], displayName = '') {
+    const normalizedBoothCode = normalizeBoothCode(booth?.id);
+    if (!normalizedBoothCode) return null;
+    const normalizedOrders = (Array.isArray(orderRows) ? orderRows : [])
+        .map((order) => ({
+            ...order,
+            id: Number(order?.id || 0),
+            company_name: String(order?.company_name || '').trim(),
+            sales_name: String(order?.sales_name || '').trim(),
+            created_at: String(order?.created_at || '').trim()
+        }))
+        .filter((order) => order.id > 0)
+        .sort((left, right) => {
+            const createdDiff = String(left.created_at || '').localeCompare(String(right.created_at || ''));
+            if (createdDiff !== 0) return createdDiff;
+            return Number(left.id || 0) - Number(right.id || 0);
+        });
+    if (normalizedOrders.length === 0) return null;
+    const companyNames = [...new Set(normalizedOrders.map((order) => order.company_name).filter(Boolean))];
+    const salesNames = [...new Set(normalizedOrders.map((order) => order.sales_name).filter(Boolean))];
+    return {
+        key: `booth:${normalizedBoothCode}`,
+        project_id: projectId,
+        order_id: Number(normalizedOrders[0]?.id || 0),
+        order_ids: normalizedOrders.map((order) => Number(order.id || 0)).filter((orderId) => orderId > 0),
+        company_name: String(displayName || '').trim() || companyNames.join('，'),
+        company_names: companyNames,
+        sales_name: salesNames.join('，'),
+        sales_names: salesNames,
+        booth_codes: [normalizedBoothCode],
+        booth_code: normalizedBoothCode,
+        sort_booth_code: normalizedBoothCode,
+        hall_names: [String(booth?.hall || '').trim()].filter(Boolean),
+        hall: String(booth?.hall || '').trim(),
+        area: roundCurrency(booth?.area),
+        order_created_at: normalizedOrders[0]?.created_at || '',
+        display_name_source: displayName ? 'booth_map_company_text_override' : '',
+        is_joint_display_group: normalizedOrders.length > 1 ? 1 : 0
     };
 }
 
@@ -533,6 +604,31 @@ async function getSpecialDecorationBoothMap(env, projectId, boothCodes = []) {
     return boothMap;
 }
 
+async function getSpecialDecorationBoothDisplayNameMap(env, projectId, boothCodes = []) {
+    const normalizedCodes = Array.from(new Set((Array.isArray(boothCodes) ? boothCodes : []).map((code) => normalizeBoothCode(code)).filter(Boolean)));
+    const displayNameMap = new Map();
+    try {
+        for (const chunk of chunkItems(normalizedCodes)) {
+            const placeholders = chunk.map(() => '?').join(',');
+            const rows = ((await env.DB.prepare(`
+              SELECT booth_code, label_style_json
+              FROM BoothMapItems
+              WHERE project_id = ?
+                AND booth_code IN (${placeholders})
+            `).bind(projectId, ...chunk).all()).results || []);
+            rows.forEach((row) => {
+                const labelStyle = safeParseJson(row.label_style_json, {});
+                const displayName = String(labelStyle?.companyTextOverride || '').trim();
+                if (displayName) displayNameMap.set(normalizeBoothCode(row.booth_code), displayName);
+            });
+        }
+    } catch (error) {
+        if (isMissingTableError(error)) return displayNameMap;
+        throw error;
+    }
+    return displayNameMap;
+}
+
 async function buildSpecialDecorationSourceRows(env, projectId, currentUser) {
     const whereClauses = [
         'o.project_id = ?',
@@ -555,10 +651,42 @@ async function buildSpecialDecorationSourceRows(env, projectId, currentUser) {
         splitBoothCodeList(row.booth_id).forEach((boothCode) => boothCodes.push(boothCode));
     });
     const boothMap = await getSpecialDecorationBoothMap(env, projectId, boothCodes);
-    return orderRows.map((row) => {
-        const rowBooths = splitBoothCodeList(row.booth_id).map((boothCode) => boothMap.get(boothCode)).filter(Boolean);
+    const groundBoothsByOrderId = new Map();
+    const ordersByGroundBoothCode = new Map();
+    orderRows.forEach((row) => {
+        const rowGroundBooths = splitBoothCodeList(row.booth_id)
+            .map((boothCode) => boothMap.get(boothCode))
+            .filter((booth) => isSpecialDecorationBoothType(booth?.type))
+            .map((booth) => ({
+                id: normalizeBoothCode(booth.id),
+                hall: String(booth.hall || '').trim(),
+                type: String(booth.type || '').trim(),
+                area: roundCurrency(booth.area)
+            }))
+            .filter((booth) => booth.id);
+        groundBoothsByOrderId.set(Number(row.id || 0), rowGroundBooths);
+        rowGroundBooths.forEach((booth) => {
+            if (!ordersByGroundBoothCode.has(booth.id)) ordersByGroundBoothCode.set(booth.id, []);
+            ordersByGroundBoothCode.get(booth.id).push(row);
+        });
+    });
+    const jointBoothCodes = Array.from(ordersByGroundBoothCode.entries())
+        .filter(([, rows]) => rows.length > 1)
+        .map(([boothCode]) => boothCode);
+    const displayNameMap = await getSpecialDecorationBoothDisplayNameMap(env, projectId, jointBoothCodes);
+    const groupedBoothCodes = new Set(jointBoothCodes.filter((boothCode) => displayNameMap.has(boothCode)));
+    const groupedRows = Array.from(groupedBoothCodes).map((boothCode) => buildSpecialDecorationBoothGroupSourceRow(
+        projectId,
+        boothMap.get(boothCode),
+        ordersByGroundBoothCode.get(boothCode) || [],
+        displayNameMap.get(boothCode) || ''
+    )).filter(Boolean);
+    const individualRows = orderRows.map((row) => {
+        const rowBooths = (groundBoothsByOrderId.get(Number(row.id || 0)) || [])
+            .filter((booth) => !groupedBoothCodes.has(booth.id));
         return buildSpecialDecorationSourceRow(projectId, row, rowBooths);
-    }).filter(Boolean).sort((left, right) => {
+    }).filter(Boolean);
+    return [...groupedRows, ...individualRows].sort((left, right) => {
         const boothDiff = compareBoothCodeValues(left.sort_booth_code, right.sort_booth_code);
         if (boothDiff !== 0) return boothDiff;
         return String(left.company_name || '').localeCompare(String(right.company_name || ''), 'zh-CN', { numeric: true });
@@ -580,15 +708,19 @@ async function getSpecialDecorationSourceByOrderId(env, projectId, orderId) {
     return sourceRow || null;
 }
 
-function buildSpecialDecorationListRow(sourceRow, record, currentUser, sequence) {
-    const normalizedRecord = normalizeSpecialDecorationRecord(record);
+function buildSpecialDecorationListRow(sourceRow, recordMap, currentUser, sequence) {
+    const orderIds = Array.from(new Set((Array.isArray(sourceRow.order_ids) ? sourceRow.order_ids : [sourceRow.order_id])
+        .map((orderId) => Number(orderId || 0))
+        .filter((orderId) => orderId > 0)));
+    const normalizedRecord = resolveSpecialDecorationReportState(orderIds, recordMap);
     const reported = normalizedRecord.reported === SPECIAL_DECORATION_REPORTED;
     const canToggle = canManageSpecialDecorations(currentUser);
     return {
-        key: String(sourceRow.order_id || ''),
+        key: String(sourceRow.key || sourceRow.order_id || ''),
         id: normalizedRecord.id,
         project_id: Number(sourceRow.project_id || 0),
         order_id: Number(sourceRow.order_id || 0),
+        order_ids: orderIds,
         sequence,
         reported: reported ? SPECIAL_DECORATION_REPORTED : SPECIAL_DECORATION_UNREPORTED,
         report_status: reported ? '已报图' : '未报图',
@@ -602,7 +734,11 @@ function buildSpecialDecorationListRow(sourceRow, record, currentUser, sequence)
         booth_codes: sourceRow.booth_codes,
         area: roundCurrency(sourceRow.area),
         company_name: sourceRow.company_name,
+        company_names: sourceRow.company_names,
         sales_name: sourceRow.sales_name,
+        sales_names: sourceRow.sales_names,
+        display_name_source: sourceRow.display_name_source || '',
+        is_joint_display_group: Number(sourceRow.is_joint_display_group || 0),
         can_toggle: canToggle,
         lock_reason: canToggle ? '' : '仅超级管理员或展务管理员可确认报图'
     };
@@ -614,19 +750,19 @@ function filterSpecialDecorationRows(sourceRows = [], recordMap = new Map(), fil
     const status = normalizeSpecialDecorationStatusFilter(filters.status);
     const salesName = String(filters.salesName || '').trim();
     return (Array.isArray(sourceRows) ? sourceRows : []).filter((row) => {
-        const record = normalizeSpecialDecorationRecord(recordMap.get(Number(row.order_id || 0)));
+        const record = resolveSpecialDecorationReportState(Array.isArray(row.order_ids) ? row.order_ids : [row.order_id], recordMap);
         if (status === 'reported' && record.reported !== SPECIAL_DECORATION_REPORTED) return false;
         if (status === 'unreported' && record.reported === SPECIAL_DECORATION_REPORTED) return false;
         if (hall && hall !== 'all' && !(Array.isArray(row.hall_names) ? row.hall_names : []).includes(hall)) return false;
-        if (salesName && salesName !== 'all' && String(row.sales_name || '').trim() !== salesName) return false;
+        if (salesName && salesName !== 'all' && !(Array.isArray(row.sales_names) ? row.sales_names : [row.sales_name]).includes(salesName)) return false;
         if (!keyword) return true;
-        return [row.booth_code, row.company_name].map((value) => String(value || '').trim().toUpperCase()).join(' ').includes(keyword);
+        return [row.booth_code, row.company_name, ...(Array.isArray(row.company_names) ? row.company_names : [])].map((value) => String(value || '').trim().toUpperCase()).join(' ').includes(keyword);
     });
 }
 
 async function buildSpecialDecorationListPayload(env, projectId, currentUser, filters = {}) {
     const sourceRows = await buildSpecialDecorationSourceRows(env, projectId, currentUser);
-    const reportRecords = await listSpecialDecorationReportRecords(env, projectId, sourceRows.map((row) => row.order_id));
+    const reportRecords = await listSpecialDecorationReportRecords(env, projectId, sourceRows.flatMap((row) => Array.isArray(row.order_ids) ? row.order_ids : [row.order_id]));
     const recordMap = new Map(reportRecords.map((record) => [Number(record.order_id || 0), record]));
     const filteredRows = filterSpecialDecorationRows(sourceRows, recordMap, filters);
     const page = normalizePositiveInteger(filters.page, 1);
@@ -637,12 +773,12 @@ async function buildSpecialDecorationListPayload(env, projectId, currentUser, fi
     const offset = (safePage - 1) * pageSize;
     const hallOptions = [...new Set(sourceRows.flatMap((row) => Array.isArray(row.hall_names) ? row.hall_names : []).filter(Boolean))]
         .sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true }));
-    const salesOptions = [...new Set(sourceRows.map((row) => String(row.sales_name || '').trim()).filter(Boolean))]
+    const salesOptions = [...new Set(sourceRows.flatMap((row) => Array.isArray(row.sales_names) ? row.sales_names : [row.sales_name]).map((value) => String(value || '').trim()).filter(Boolean))]
         .sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true }));
     return {
         items: filteredRows.slice(offset, offset + pageSize).map((sourceRow, index) => buildSpecialDecorationListRow(
             sourceRow,
-            recordMap.get(Number(sourceRow.order_id || 0)),
+            recordMap,
             currentUser,
             offset + index + 1
         )),
