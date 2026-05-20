@@ -565,6 +565,8 @@ export async function getHallOverviewRows(env, projectId) {
         if (!booths.length) return;
         const totalArea = Number(booths.reduce((sum, booth) => sum + Number(booth.area || 0), 0).toFixed(2));
         const equalShare = booths.length > 0 ? 1 / booths.length : 0;
+        const orderArea = Number(order.area || 0);
+        const effectiveOrderArea = orderArea > 0 ? orderArea : totalArea;
         const paidAmount = Number(order.paid_amount || 0);
         const totalAmount = Number(order.total_amount || 0);
         const totalBoothFee = Number(order.total_booth_fee || 0);
@@ -575,7 +577,8 @@ export async function getHallOverviewRows(env, projectId) {
             const share = totalArea > 0
                 ? Number(booth.area || 0) / totalArea
                 : equalShare;
-            const boothCount = Number((Number(booth.area || 0) / 9).toFixed(2));
+            const allocatedArea = Number((Math.max(effectiveOrderArea, 0) * share).toFixed(2));
+            const boothCount = Number((allocatedArea / 9).toFixed(2));
             const stat = ensureHallStat(booth.hall);
             const isReceived = totalBoothFee <= 0 || paidAmount > 0;
             const isGround = String(booth.type || '').trim() === '光地';

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildRegionOverviewFromAggregateRows,
+  getHallOverviewRows,
   getOptimizedHomeDashboardData,
   getRegionOverviewRows
 } from '../src/routes/dashboard.mjs';
@@ -132,6 +133,71 @@ async function runTests() {
   const scopedRegionOverview = await getRegionOverviewRows(regionEnv, 7, { role: 'sales', name: '张三' });
   assert.equal(scopedRegionOverview.total_company_count, 3);
   assert.equal(scopedRegionOverview.total_booth_count, 4);
+
+  const hallEnv = {
+    DB: {
+      prepare(query) {
+        const sql = String(query || '');
+        return {
+          params: [],
+          bind(...params) {
+            this.params = params;
+            return this;
+          },
+          async all() {
+            assert.deepEqual(this.params, [7]);
+            if (sql.includes('GROUP BY COALESCE(hall')) {
+              return {
+                results: [
+                  {
+                    hall: '3号馆',
+                    configured_booth_count: 24,
+                    ground_row_count: 1,
+                    ground_area: 216,
+                    ground_booth_count: 24,
+                    standard_row_count: 0,
+                    standard_area: 0,
+                    standard_booth_count: 0
+                  }
+                ]
+              };
+            }
+            if (sql.includes('SELECT id, hall, type, area') && sql.includes('FROM Booths')) {
+              return {
+                results: [
+                  { id: '3F27', hall: '3号馆', type: '光地', area: 216 }
+                ]
+              };
+            }
+            if (sql.includes('FROM Orders') && sql.includes("status = '正常'")) {
+              return {
+                results: Array.from({ length: 20 }, (_, index) => ({
+                  id: index + 1,
+                  booth_id: '3F27',
+                  area: 10.8,
+                  total_booth_fee: 1000,
+                  total_amount: 1000,
+                  paid_amount: 1000
+                }))
+              };
+            }
+            return { results: [] };
+          }
+        };
+      }
+    }
+  };
+  const hallOverview = await getHallOverviewRows(hallEnv, 7);
+  assert.equal(hallOverview.length, 1);
+  assert.equal(hallOverview[0].configured_total_booth_count, 24);
+  assert.equal(hallOverview[0].received_booth_count, 24);
+  assert.equal(hallOverview[0].received_ground_booth_count, 24);
+  assert.equal(hallOverview[0].charged_booth_count, 24);
+  assert.equal(hallOverview[0].landed_booth_count, 24);
+  assert.equal(hallOverview[0].full_paid_booth_count, 24);
+  assert.equal(hallOverview[0].remaining_unlanded_booth_count, 0);
+  assert.equal(hallOverview[0].received_company_count, 20);
+  assert.equal(hallOverview[0].landed_order_count, 20);
 }
 
 await runTests();
