@@ -534,6 +534,55 @@ async function testDirectoryScopesSalesAndReturnsStatusColumns() {
   assert.ok(orderListCall.params.includes('张三'));
 }
 
+async function testDirectoryUsesActualOrderAreaForJointBooths() {
+  const env = createMockEnv({
+    allResponses: {
+      'FROM Orders\n      WHERE project_id = ?': {
+        results: [
+          {
+            ...ORDER_ROW,
+            id: 166,
+            company_name: '福建省洋泽海洋生物科技有限公司',
+            booth_id: '2C70',
+            area: 180,
+            exhibitor_info_confirmed_at: ''
+          },
+          {
+            ...ORDER_ROW,
+            id: 167,
+            company_name: '福建省鸿航水产有限公司',
+            booth_id: '2C70',
+            area: 0,
+            exhibitor_info_confirmed_at: ''
+          }
+        ]
+      },
+      'FROM Booths WHERE project_id = ? AND id IN': {
+        results: [{ id: '2C70', hall: '2号馆', type: '光地', area: 180 }]
+      },
+      'FROM ExhibitionLintels\n          WHERE project_id = ? AND order_id IN': {
+        results: []
+      }
+    }
+  });
+  const req = new Request('http://localhost/api/exhibition/exhibitor-directory?projectId=7', { method: 'GET' });
+  const res = await handleExhibitionRoutes({
+    request: req,
+    env,
+    url: new URL(req.url),
+    currentUser: { role: 'exhibition_manager', name: '展务' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body.items.map((row) => [row.order_id, row.booth_code, row.area]), [
+    [166, '2C70', 180],
+    [167, '2C70', 0]
+  ]);
+  assert.equal(body.items[0].hall, '2号馆');
+  assert.equal(body.items[1].booth_type, '光地');
+}
+
 async function testDirectoryScopesAdminButNotExhibitionManager() {
   const createDirectoryEnv = () => createMockEnv({
     allResponses: {
@@ -587,6 +636,7 @@ async function run() {
   await testReopenBlockedAfterCollectionDeadline();
   await testPublicSubmitRateLimitsByClientIp();
   await testDirectoryScopesSalesAndReturnsStatusColumns();
+  await testDirectoryUsesActualOrderAreaForJointBooths();
   await testDirectoryScopesAdminButNotExhibitionManager();
   console.log('Exhibitor confirmation route tests passed');
 }

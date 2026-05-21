@@ -2468,7 +2468,7 @@ async function buildExhibitorDirectoryPayload(env, projectId, currentUser) {
                 booth_code: boothCode,
                 hall: '',
                 booth_type: '',
-                area: 0,
+                area: Number(row.area || 0),
                 company_name: String(row.company_name || '').trim(),
                 sales_name: String(row.sales_name || '').trim(),
                 basic_info_status: normalizeExhibitorInfoStatus(row.exhibitor_info_status),
@@ -2500,7 +2500,6 @@ async function buildExhibitorDirectoryPayload(env, projectId, currentUser) {
         if (meta) {
             row.hall = meta.hall;
             row.booth_type = meta.type;
-            row.area = meta.area;
         }
     });
 
