@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const exhibitorConfirmHtml = readFileSync(new URL('../public/exhibitor-confirm.html', import.meta.url), 'utf8');
 
 function findMainContentCloseIndex(source) {
   const mainOpen = source.match(/<div\b[^>]*\bid=["']main-content["'][^>]*>/i);
@@ -71,11 +72,24 @@ assert.ok(html.includes('id="lintel-filter-hall"'), 'lintel panel should expose 
 assert.ok(html.includes('id="lintel-filter-keyword"'), 'lintel panel should expose a booth or company keyword search');
 assert.ok(html.includes('id="lintel-editor"'), 'lintel panel should expose a lintel editor modal');
 assert.ok(html.includes('如有特殊要求请写明'), 'lintel editor should expose the remark guidance placeholder');
+assert.ok(html.includes('id="confirmation-settings-reminder-milestones"'), 'confirmation settings should expose supplemental milestone copy');
+assert.ok(html.includes('id="confirmation-settings-reminder-notes"'), 'confirmation settings should expose pre-submit reminder copy');
+assert.ok(html.includes('id="confirmation-settings-submitted-reminder-notes"'), 'confirmation settings should expose submitted reminder copy');
 assert.ok(html.includes('value="lintel"'), 'booth map preview should expose a lintel-oriented filter mode');
 assert.ok(html.includes('id="bm-filter-lintel-group"'), 'booth map preview should expose lintel preview filters');
 assert.ok(!html.includes('./js/booth-map.js'), 'booth-map.js should not be eagerly loaded by index.html');
 assert.ok(!html.includes('./js/finance.js'), 'finance.js should not be eagerly loaded by index.html');
 assert.ok(!html.includes('./js/exhibition.js'), 'exhibition.js should not be eagerly loaded by index.html');
 assert.ok(!html.includes('id="order-search" placeholder="搜公司/展位号..." class="border p-2 rounded text-sm w-48" onkeyup='), 'order list search should bind input events from finance.js');
+assert.ok(exhibitorConfirmHtml.includes('entry-reminder-mask'), 'public exhibitor confirmation page should include the entry reminder modal shell');
+assert.ok(exhibitorConfirmHtml.includes('buildEntryReminderDialog'), 'public exhibitor confirmation page should build the entry reminder dialog');
+assert.ok(exhibitorConfirmHtml.includes('submitted_reminder_notes_text'), 'public exhibitor confirmation page should render submitted reminder copy');
+assert.ok(exhibitorConfirmHtml.includes('calc(100dvh - 32px)'), 'entry reminder modal should constrain mobile viewport height');
+assert.ok(exhibitorConfirmHtml.includes('class="required-badge"'), 'public exhibitor confirmation page should render explicit required badges');
+assert.ok(exhibitorConfirmHtml.includes('本页必填'), 'public exhibitor confirmation page should summarize required fields');
+assert.ok(exhibitorConfirmHtml.includes('可填写主营品类、核心产品、服务范围'), 'public exhibitor confirmation page should guide detailed product input');
+assert.ok(exhibitorConfirmHtml.includes('可填写企业优势、产品卖点、供需对接信息'), 'public exhibitor confirmation page should guide profile input');
+assert.ok(exhibitorConfirmHtml.includes('data-required-message'), 'public exhibitor confirmation page should attach inline required error copy');
+assert.ok(exhibitorConfirmHtml.includes('还有 ${missingRequiredCount} 项必填未完成'), 'public exhibitor confirmation page should report missing required count');
 
 console.log('Index layout tests passed');

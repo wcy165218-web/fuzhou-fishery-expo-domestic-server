@@ -305,30 +305,100 @@
 	    .field-head {
 	      margin-bottom: 14px;
 	    }
-    .field-title {
-      display: flex;
-      align-items: baseline;
-      gap: 2px;
-      margin: 0;
-      color: var(--ink);
-      font-size: 18px;
-      line-height: 1.5;
-      font-weight: 600;
-    }
-    .required-mark {
-      color: var(--danger);
-      font-size: 17px;
-      line-height: 1;
-    }
-	    .field-hint {
-	      margin: 7px 0 0;
-	      color: var(--muted);
+	    .field-title {
+	      display: flex;
+	      flex-wrap: wrap;
+	      align-items: center;
+	      gap: 8px;
+	      margin: 0;
+	      color: var(--ink);
+	      font-size: 18px;
+	      line-height: 1.5;
+	      font-weight: 600;
+	    }
+	    .required-mark {
+	      color: var(--danger);
+	      font-size: 17px;
+	      line-height: 1;
+	    }
+	    .required-badge {
+	      display: inline-flex;
+	      align-items: center;
+	      gap: 4px;
+	      min-height: 23px;
+	      border: 1px solid #fecdd3;
+	      border-radius: 999px;
+	      background: #fff1f2;
+	      padding: 2px 8px;
+	      color: #be123c;
+	      font-size: 12px;
+	      line-height: 1.45;
+	      font-weight: 700;
+	      white-space: nowrap;
+	    }
+	    .required-badge .required-mark {
+	      font-size: 14px;
+	      line-height: 1;
+	    }
+		    .field-hint {
+		      margin: 7px 0 0;
+		      color: var(--muted);
+		      font-size: 13px;
+		      line-height: 1.8;
+	    }
+	    .field-guide {
+	      display: grid;
+	      gap: 6px;
+	      margin-top: 9px;
+	    }
+	    .field-guide-line {
+	      border-radius: 9px;
+	      padding: 8px 10px;
+	      font-size: 12px;
+	      line-height: 1.7;
+	      word-break: break-word;
+	    }
+	    .field-guide-line.example {
+	      border: 1px solid #bfdbfe;
+	      background: #eff6ff;
+	      color: #1e3a8a;
+	    }
+	    .field-guide-line.required-tip {
+	      border: 1px solid #fed7aa;
+	      background: #fff7ed;
+	      color: #9a3412;
+	    }
+	    .required-summary {
+	      display: flex;
+	      gap: 10px;
+	      align-items: flex-start;
+	      margin: -2px 0 20px;
+	      border: 1px solid #fde68a;
+	      border-radius: 12px;
+	      background: #fffbeb;
+	      padding: 13px 14px;
+	      color: #78350f;
 	      font-size: 13px;
 	      line-height: 1.8;
-    }
-    .control-wrap {
-      position: relative;
-    }
+	    }
+	    .required-summary strong {
+	      color: #92400e;
+	    }
+	    .required-summary-icon {
+	      display: inline-flex;
+	      flex: 0 0 auto;
+	      align-items: center;
+	      justify-content: center;
+	      width: 24px;
+	      height: 24px;
+	      border-radius: 8px;
+	      background: #fff7ed;
+	      color: #d97706;
+	      font-weight: 800;
+	    }
+	    .control-wrap {
+	      position: relative;
+	    }
     .confirm-control {
       display: block;
       width: 100%;
@@ -351,12 +421,27 @@
 	      background: #fff;
 	      box-shadow: 0 0 0 3px var(--brand-ring);
 	    }
-    .confirm-control.is-invalid {
-      border-color: var(--danger);
-      background: #fff7f8;
-      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14);
-      animation: invalidPulse .9s ease;
-    }
+	    .confirm-control.is-invalid {
+	      border-color: var(--danger);
+	      background: #fff7f8;
+	      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14);
+	      animation: invalidPulse .9s ease;
+	    }
+	    .field-error {
+	      display: none;
+	      margin-top: 7px;
+	      border-radius: 9px;
+	      background: #fff1f2;
+	      padding: 8px 10px;
+	      color: #be123c;
+	      font-size: 12px;
+	      line-height: 1.7;
+	      font-weight: 700;
+	      word-break: break-word;
+	    }
+	    .field-error.is-visible {
+	      display: block;
+	    }
     @keyframes invalidPulse {
       0%, 100% { transform: translateX(0); }
       18%, 54% { transform: translateX(-3px); }
@@ -411,15 +496,22 @@
       color: #64748b;
       font-size: 12px;
     }
-	    .control-label {
-	      display: flex;
-	      align-items: baseline;
-	      gap: 4px;
-	      margin: 16px 0 8px;
-	      color: var(--text);
-	      font-size: 13px;
-	      line-height: 1.5;
-    }
+		    .control-label {
+		      display: flex;
+		      flex-wrap: wrap;
+		      align-items: baseline;
+		      gap: 6px;
+		      margin: 16px 0 8px;
+		      color: var(--text);
+		      font-size: 13px;
+		      line-height: 1.5;
+	    }
+	    .control-guide {
+	      margin: -3px 0 8px;
+	      color: #64748b;
+	      font-size: 12px;
+	      line-height: 1.7;
+	    }
     .submit-button {
       display: block;
       width: 100%;
@@ -551,13 +643,172 @@
       background: #f1f5f9;
       color: #334155;
     }
-    .dialog-button.primary {
-      background: var(--brand);
-      color: #fff;
-    }
-    .error-shell {
-      display: flex;
-      min-height: 100vh;
+	    .dialog-button.primary {
+	      background: var(--brand);
+	      color: #fff;
+	    }
+	    body.entry-reminder-open {
+	      overflow: hidden;
+	    }
+	    .entry-reminder-mask {
+	      position: fixed;
+	      inset: 0;
+	      z-index: 60;
+	      display: flex;
+	      align-items: center;
+	      justify-content: center;
+	      background: rgba(15, 23, 42, 0.58);
+	      padding: 16px;
+	      backdrop-filter: blur(5px);
+	    }
+	    .entry-reminder-dialog {
+	      display: flex;
+	      flex-direction: column;
+	      width: min(680px, calc(100vw - 32px));
+	      max-height: calc(100dvh - 32px);
+	      overflow: hidden;
+	      border: 1px solid rgba(226, 232, 240, 0.9);
+	      border-radius: 16px;
+	      background: #fff;
+	      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+	    }
+	    .entry-reminder-header {
+	      flex: 0 0 auto;
+	      padding: 22px 24px 16px;
+	      border-bottom: 1px solid #e2e8f0;
+	      background: #f8fafc;
+	    }
+	    .entry-reminder-kicker {
+	      color: #64748b;
+	      font-size: 12px;
+	      line-height: 1.5;
+	      font-weight: 600;
+	    }
+	    .entry-reminder-title {
+	      margin: 6px 0 0;
+	      color: #0f172a;
+	      font-size: 24px;
+	      line-height: 1.32;
+	      font-weight: 700;
+	      letter-spacing: 0;
+	    }
+	    .entry-reminder-body {
+	      flex: 1 1 auto;
+	      min-height: 0;
+	      overflow-y: auto;
+	      padding: 18px 24px 20px;
+	    }
+	    .entry-reminder-card {
+	      display: flex;
+	      gap: 13px;
+	      align-items: flex-start;
+	      border: 1px solid #e2e8f0;
+	      border-radius: 14px;
+	      padding: 16px;
+	      color: #334155;
+	      line-height: 1.78;
+	    }
+	    .entry-reminder-card + .entry-reminder-card {
+	      margin-top: 14px;
+	    }
+	    .entry-reminder-card.milestones {
+	      border-color: #fde68a;
+	      background: #fffbeb;
+	      color: #78350f;
+	    }
+	    .entry-reminder-card.notes {
+	      border-color: #bfdbfe;
+	      background: #eff6ff;
+	      color: #1e3a8a;
+	    }
+	    .entry-reminder-card.submitted {
+	      border-color: #99f6e4;
+	      background: #ecfdf5;
+	      color: #065f46;
+	    }
+	    .entry-reminder-card.closed {
+	      border-color: #fed7aa;
+	      background: #fff7ed;
+	      color: #9a3412;
+	    }
+	    .entry-reminder-icon {
+	      display: inline-flex;
+	      flex: 0 0 auto;
+	      align-items: center;
+	      justify-content: center;
+	      width: 38px;
+	      height: 38px;
+	      border-radius: 12px;
+	      background: rgba(255, 255, 255, 0.72);
+	      color: currentColor;
+	    }
+	    .entry-reminder-icon svg {
+	      width: 21px;
+	      height: 21px;
+	    }
+	    .entry-reminder-card-title {
+	      color: inherit;
+	      font-size: 16px;
+	      line-height: 1.45;
+	      font-weight: 700;
+	    }
+	    .entry-reminder-text {
+	      margin-top: 7px;
+	      color: inherit;
+	      font-size: 14px;
+	      line-height: 1.85;
+	      white-space: normal;
+	      overflow-wrap: anywhere;
+	    }
+	    .entry-reminder-time {
+	      margin-top: 6px;
+	      color: inherit;
+	      font-size: 24px;
+	      line-height: 1.25;
+	      font-weight: 700;
+	      letter-spacing: 0;
+	    }
+	    .entry-reminder-chip {
+	      display: inline-flex;
+	      align-items: center;
+	      min-height: 26px;
+	      margin-top: 10px;
+	      border-radius: 999px;
+	      background: rgba(255, 255, 255, 0.78);
+	      padding: 3px 10px;
+	      color: inherit;
+	      font-size: 12px;
+	      line-height: 1.5;
+	      font-weight: 700;
+	    }
+	    .entry-reminder-extra {
+	      margin-top: 12px;
+	      border-top: 1px solid rgba(120, 53, 15, 0.18);
+	      padding-top: 10px;
+	    }
+	    .entry-reminder-footer {
+	      flex: 0 0 auto;
+	      border-top: 1px solid #e2e8f0;
+	      background: #fff;
+	      padding: 15px 24px calc(15px + env(safe-area-inset-bottom));
+	    }
+	    .entry-reminder-button {
+	      width: 100%;
+	      min-height: 46px;
+	      border: 0;
+	      border-radius: 12px;
+	      background: var(--brand);
+	      color: #fff;
+	      padding: 12px 18px;
+	      font-size: 15px;
+	      line-height: 1.45;
+	      font-weight: 700;
+	      cursor: pointer;
+	      box-shadow: 0 10px 24px rgba(0, 80, 179, 0.22);
+	    }
+	    .error-shell {
+	      display: flex;
+	      min-height: 100vh;
       align-items: center;
       justify-content: center;
       padding: 24px;
@@ -648,10 +899,28 @@
           color: var(--muted);
           font-size: 12px;
           line-height: 1.3;
-        }
-        .dialog-actions { flex-direction: column-reverse; }
-        .dialog-button { width: 100%; }
-	    }
+	        }
+	        .dialog-actions { flex-direction: column-reverse; }
+	        .dialog-button { width: 100%; }
+	        .field-title { align-items: flex-start; gap: 6px; }
+	        .required-badge { min-height: 21px; padding: 2px 7px; font-size: 11px; }
+	        .required-summary { margin-bottom: 18px; padding: 12px; }
+	        .field-guide-line, .field-error, .control-guide { line-height: 1.65; }
+	        .entry-reminder-mask { padding: 16px; align-items: center; }
+	        .entry-reminder-dialog {
+	          width: calc(100vw - 32px);
+	          max-height: calc(100dvh - 32px);
+	          border-radius: 14px;
+	        }
+	        .entry-reminder-header { padding: 18px 18px 14px; }
+	        .entry-reminder-title { font-size: 21px; }
+	        .entry-reminder-body { padding: 15px 18px 18px; }
+	        .entry-reminder-card { padding: 14px; gap: 11px; }
+	        .entry-reminder-icon { width: 34px; height: 34px; border-radius: 10px; }
+	        .entry-reminder-time { font-size: 20px; }
+	        .entry-reminder-footer { padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); }
+	        .entry-reminder-button { min-height: 48px; }
+		    }
   </style>
   <script>
 	    function readConfirmationTokenFromLocation() {
@@ -664,12 +933,14 @@
 	      if (path.includes('/') || path.includes('.')) return '';
 	      return path;
 	    }
-	    const state = {
-	      token: readConfirmationTokenFromLocation(),
-	      data: null,
-	      deadlineTimer: null,
-	      settingsSyncTimer: null
-	    };
+		    const state = {
+		      token: readConfirmationTokenFromLocation(),
+		      data: null,
+		      deadlineTimer: null,
+		      settingsSyncTimer: null,
+		      reminderAcknowledged: false,
+		      reminderKeydownHandler: null
+		    };
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     const parseChinaTime = (value) => {
       const text = String(value || '').trim();
@@ -702,10 +973,134 @@
 	    function getCollectionDeadlineDisplay(data = state.data) {
 	      return String(data?.link?.collection_deadline_display || data?.settings?.collection_deadline_display || '').trim();
 	    }
-	    function hasSubmitted(data = state.data) {
-	      return !!String(data?.link?.submitted_at || data?.order?.submitted_at || '').trim();
-	    }
-	    function buildDeadlinePanel(data = state.data) {
+		    function hasSubmitted(data = state.data) {
+		      return !!getSubmittedAt(data);
+		    }
+		    function getSubmittedAt(data = state.data) {
+		      return String(data?.link?.submitted_at || data?.order?.submitted_at || '').trim();
+		    }
+		    function renderReminderText(value) {
+		      const text = String(value || '').trim();
+		      if (!text) return '';
+		      return escapeHtml(text).replace(/\r?\n/g, '<br>');
+		    }
+		    function reminderIcon(kind = 'info') {
+		      const paths = {
+		        time: '<path d="M6.5 3.75h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M6.5 20.25h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M8 3.75v3.2c0 1.13.47 2.2 1.3 2.96L12 12.4l2.7-2.49A4 4 0 0 0 16 6.95v-3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 20.25v-3.2c0-1.13.47-2.2 1.3-2.96L12 11.6l2.7 2.49A4 4 0 0 1 16 17.05v3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+		        check: '<path d="M20 6.75 9.5 17.25 4 11.75" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+		        alert: '<path d="M12 8.25v4.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><path d="M12 16.5h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M10.25 4.5 2.9 17.25a2 2 0 0 0 1.74 3h14.72a2 2 0 0 0 1.74-3L13.75 4.5a2 2 0 0 0-3.5 0Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+		        info: '<circle cx="12" cy="12" r="8.25" stroke="currentColor" stroke-width="1.9"/><path d="M12 10.75v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 7.75h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
+		      };
+		      return `<span class="entry-reminder-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none">${paths[kind] || paths.info}</svg></span>`;
+		    }
+		    function getDefaultReminderNotes(mode) {
+		      if (mode === 'submitted') return '页面已提交确认，当前仅可查看。如需修改，请联系组委会或业务员重新开通编辑。';
+		      if (mode === 'closed') return '信息收集已截止，当前页面仅供查看，不能再编辑或提交。如需处理，请联系组委会联系人。';
+		      return '请重点核对必填字段、楣板文字、详细展品和企业简介。提交后将无法自行修改，如需修改请联系组委会联系人重新开通编辑。';
+		    }
+		    function buildEntryReminderDialog(data = state.data) {
+		      const settings = data?.settings || {};
+		      const submitted = hasSubmitted(data);
+		      const collectionClosed = !!data?.link?.collection_closed;
+		      const mode = submitted ? 'submitted' : (collectionClosed ? 'closed' : 'open');
+		      const deadlineValue = getCollectionDeadline(data);
+		      const deadlineText = getCollectionDeadlineDisplay(data) || formatChinaTime(deadlineValue) || '暂未设置';
+		      const targetMs = parseChinaTime(deadlineValue);
+		      const countdownText = targetMs ? formatCountdown(targetMs, '已截止') : '';
+		      const submittedText = formatChinaTime(getSubmittedAt(data)) || '此前';
+		      const projectName = data?.project?.name || '福州渔博会';
+		      const reminderNotes = renderReminderText(
+		        mode === 'submitted'
+		          ? (settings.submitted_reminder_notes_text || getDefaultReminderNotes(mode))
+		          : (settings.reminder_notes_text || getDefaultReminderNotes(mode))
+		      );
+		      const supplementalMilestones = renderReminderText(settings.reminder_milestones_text);
+		      const title = mode === 'submitted'
+		        ? '您已提交参展信息'
+		        : (mode === 'closed' ? '信息收集已截止' : '请先阅读重要提醒');
+		      const buttonText = mode === 'submitted'
+		        ? '我已知晓，查看已提交信息'
+		        : (mode === 'closed' ? '我已知晓，进入查看页' : '我已知晓，进入填写');
+		      const statusCard = submitted ? `
+		        <section class="entry-reminder-card submitted">
+		          ${reminderIcon('check')}
+		          <div>
+		            <div class="entry-reminder-card-title">已提交提醒</div>
+		            <div class="entry-reminder-time">${escapeHtml(submittedText)}</div>
+		            <div class="entry-reminder-text">您的参展信息已提交确认，当前页面为只读查看状态。</div>
+		          </div>
+		        </section>
+		      ` : `
+		        <section class="entry-reminder-card ${collectionClosed ? 'closed' : 'milestones'}">
+		          ${reminderIcon(collectionClosed ? 'alert' : 'time')}
+		          <div>
+		            <div class="entry-reminder-card-title">${collectionClosed ? '信息收集截止时间' : '重要时间节点'}</div>
+		            <div class="entry-reminder-time">${escapeHtml(deadlineText)}</div>
+		            <div class="entry-reminder-chip">${collectionClosed ? '当前已截止，页面仅可查看' : (countdownText ? `距离截止还有 ${escapeHtml(countdownText)}` : '请联系组委会确认截止时间')}</div>
+		            ${supplementalMilestones ? `<div class="entry-reminder-extra entry-reminder-text">${supplementalMilestones}</div>` : ''}
+		          </div>
+		        </section>
+		      `;
+		      const notesTitle = mode === 'submitted'
+		        ? '已提交后注意事项'
+		        : (mode === 'closed' ? '截止后注意事项' : '填写前注意事项');
+		      return `
+		        <div class="entry-reminder-dialog" role="dialog" aria-modal="true" aria-labelledby="entry-reminder-title">
+		          <div class="entry-reminder-header">
+		            <div class="entry-reminder-kicker">${escapeHtml(projectName)} · 展商确认提醒</div>
+		            <h2 id="entry-reminder-title" class="entry-reminder-title">${escapeHtml(title)}</h2>
+		          </div>
+		          <div class="entry-reminder-body">
+		            ${statusCard}
+		            <section class="entry-reminder-card notes">
+		              ${reminderIcon('info')}
+		              <div>
+		                <div class="entry-reminder-card-title">${escapeHtml(notesTitle)}</div>
+		                <div class="entry-reminder-text">${reminderNotes}</div>
+		              </div>
+		            </section>
+		          </div>
+		          <div class="entry-reminder-footer">
+		            <button type="button" class="entry-reminder-button" data-entry-reminder-confirm>${escapeHtml(buttonText)}</button>
+		          </div>
+		        </div>
+		      `;
+		    }
+		    function removeEntryReminderDialog({ acknowledge = false } = {}) {
+		      if (acknowledge) state.reminderAcknowledged = true;
+		      const existing = document.getElementById('entry-reminder-mask');
+		      if (existing) existing.remove();
+		      document.body.classList.remove('entry-reminder-open');
+		      if (state.reminderKeydownHandler) {
+		        document.removeEventListener('keydown', state.reminderKeydownHandler, true);
+		        state.reminderKeydownHandler = null;
+		      }
+		    }
+		    function showEntryReminder(data = state.data) {
+		      if (!data?.link) return;
+		      removeEntryReminderDialog();
+		      const mask = document.createElement('div');
+		      mask.id = 'entry-reminder-mask';
+		      mask.className = 'entry-reminder-mask';
+		      mask.innerHTML = buildEntryReminderDialog(data);
+		      mask.addEventListener('click', (event) => {
+		        if (event.target.closest('[data-entry-reminder-confirm]')) {
+		          removeEntryReminderDialog({ acknowledge: true });
+		        }
+		      });
+		      state.reminderKeydownHandler = (event) => {
+		        if (event.key === 'Escape') event.preventDefault();
+		      };
+		      document.addEventListener('keydown', state.reminderKeydownHandler, true);
+		      document.body.appendChild(mask);
+		      document.body.classList.add('entry-reminder-open');
+		      setTimeout(() => mask.querySelector('[data-entry-reminder-confirm]')?.focus(), 0);
+		    }
+		    function maybeShowEntryReminder(data = state.data) {
+		      if (state.reminderAcknowledged || !data?.link) return;
+		      showEntryReminder(data);
+		    }
+		    function buildDeadlinePanel(data = state.data) {
 	      const deadlineValue = getCollectionDeadline(data);
 	      const deadlineText = getCollectionDeadlineDisplay(data) || formatChinaTime(deadlineValue);
 	      if (!deadlineText) {
@@ -768,10 +1163,11 @@
 	          state.data.link = { ...(state.data.link || {}), ...(fresh.link || {}) };
 	          state.data.settings = { ...(state.data.settings || {}), ...(fresh.settings || {}) };
 	          const slot = document.getElementById('deadline-panel-slot');
-	          if (slot) slot.innerHTML = buildDeadlinePanel(state.data);
-	          startDeadlineCountdown();
-	          showInlineMessage('信息收集截止时间已更新。');
-	        }
+		          if (slot) slot.innerHTML = buildDeadlinePanel(state.data);
+		          startDeadlineCountdown();
+		          if (!state.reminderAcknowledged && document.getElementById('entry-reminder-mask')) showEntryReminder(state.data);
+		          showInlineMessage('信息收集截止时间已更新。');
+		        }
 	      } catch (error) {
 	        console.warn('Sync confirmation deadline failed:', error);
 	      }
@@ -793,9 +1189,12 @@
       if (!response.ok || data?.success === false) throw new Error(data?.error || '请求失败');
       return data;
     }
-	    function requiredMark() {
-	      return '<span class="required-mark" aria-label="必填">*</span>';
-	    }
+		    function requiredMark() {
+		      return '<span class="required-mark" aria-label="必填">*</span>';
+		    }
+		    function requiredBadge() {
+		      return '<span class="required-badge" aria-label="必填"><span class="required-mark" aria-hidden="true">*</span><span>必填</span></span>';
+		    }
 	    function hourglassIcon() {
 	      return '<span class="deadline-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6.5 3.75h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M6.5 20.25h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M8 3.75v3.2c0 1.13.47 2.2 1.3 2.96L12 12.4l2.7-2.49A4 4 0 0 0 16 6.95v-3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 20.25v-3.2c0-1.13.47-2.2 1.3-2.96L12 11.6l2.7 2.49A4 4 0 0 1 16 17.05v3.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 	    }
@@ -813,42 +1212,66 @@
 	      clearTimeout(state.toastTimer);
 	      state.toastTimer = setTimeout(() => toast.remove(), 3600);
 	    }
-    function updateCharacterCounter(control) {
-      if (!control?.dataset?.counterTarget) return;
-      const key = control.dataset.counterTarget;
-      const counter = document.querySelector(`[data-counter-for="${key}"]`);
+	    function updateCharacterCounter(control) {
+	      if (!control?.dataset?.counterTarget) return;
+	      const key = control.dataset.counterTarget;
+	      const counter = document.querySelector(`[data-counter-for="${key}"]`);
       if (!counter) return;
       const current = countCharacters(control.value);
       const max = Number(control.getAttribute('maxlength') || control.dataset.maxLength || 0);
       counter.textContent = max ? `${current}/${max} 字` : `${current} 字`;
-      counter.classList.toggle('is-near-limit', !!max && current >= Math.floor(max * 0.85));
-      counter.classList.toggle('is-over-limit', !!max && current > max);
-    }
-    function initFieldFeedback() {
-      document.querySelectorAll('.confirm-control').forEach((control) => {
-        updateCharacterCounter(control);
-        control.addEventListener('input', () => {
-          control.classList.remove('is-invalid');
-          updateCharacterCounter(control);
-        });
-      });
-    }
-    function markInvalidFields(controls) {
-      const invalidControls = controls.filter((control) => control && !String(control.value || '').trim());
-      invalidControls.forEach((control) => {
-        control.classList.remove('is-invalid');
-        void control.offsetWidth;
-        control.classList.add('is-invalid');
-      });
-      const first = invalidControls[0];
+	      counter.classList.toggle('is-near-limit', !!max && current >= Math.floor(max * 0.85));
+	      counter.classList.toggle('is-over-limit', !!max && current > max);
+	    }
+	    function getControlErrorNode(control) {
+	      const key = control?.dataset?.counterTarget || '';
+	      return key ? document.getElementById(`${key}-error`) : null;
+	    }
+	    function clearControlError(control) {
+	      if (!control) return;
+	      control.classList.remove('is-invalid');
+	      control.removeAttribute('aria-invalid');
+	      const errorNode = getControlErrorNode(control);
+	      if (errorNode) {
+	        errorNode.textContent = '';
+	        errorNode.classList.remove('is-visible');
+	      }
+	    }
+	    function setControlError(control, message) {
+	      if (!control) return;
+	      control.classList.remove('is-invalid');
+	      void control.offsetWidth;
+	      control.classList.add('is-invalid');
+	      control.setAttribute('aria-invalid', 'true');
+	      const errorNode = getControlErrorNode(control);
+	      if (errorNode) {
+	        errorNode.textContent = message || control.dataset.requiredMessage || '请填写该必填项。';
+	        errorNode.classList.add('is-visible');
+	      }
+	    }
+	    function initFieldFeedback() {
+	      document.querySelectorAll('.confirm-control').forEach((control) => {
+	        updateCharacterCounter(control);
+	        control.addEventListener('input', () => {
+	          clearControlError(control);
+	          updateCharacterCounter(control);
+	        });
+	      });
+	    }
+	    function markInvalidFields(controls) {
+	      const invalidControls = controls.filter((control) => control && !String(control.value || '').trim());
+	      invalidControls.forEach((control) => {
+	        setControlError(control, control.dataset.requiredMessage || '请填写该必填项。');
+	      });
+	      const first = invalidControls[0];
       if (first) {
         first.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => {
           try { first.focus({ preventScroll: true }); } catch (error) { first.focus(); }
         }, 360);
-      }
-      return invalidControls.length;
-    }
+	      }
+	      return invalidControls.length;
+	    }
 	    function setSubmitButtonState(button, stateName) {
 	      if (!button) return;
 	      button.classList.remove('success');
@@ -896,9 +1319,10 @@
         document.body.appendChild(mask);
       });
     }
-    function renderError(message) {
-      document.getElementById('app').innerHTML = `
-        <section class="error-shell">
+	    function renderError(message) {
+	      removeEntryReminderDialog();
+	      document.getElementById('app').innerHTML = `
+	        <section class="error-shell">
           <div class="error-card">
             <h1>链接暂不可用</h1>
             <p>${escapeHtml(message || '链接无效或已过期，请联系业务员重新获取。')}</p>
@@ -921,58 +1345,73 @@
         </div>
       `;
     }
-    function countedTextarea({ id, value = '', readonly = false, maxLength = 300, minHeight = '', marker = '' }) {
-      const safeId = escapeHtml(id);
-      const style = minHeight ? ` style="min-height:${escapeHtml(minHeight)}"` : '';
-      const markerAttr = marker ? ` ${marker}` : '';
-      return `
-        <div class="control-wrap">
-          <textarea id="${safeId}" maxlength="${Number(maxLength)}" data-counter-target="${safeId}" data-max-length="${Number(maxLength)}"${markerAttr} ${readonly ? 'disabled' : ''} class="confirm-control"${style}>${escapeHtml(value)}</textarea>
-          <div class="char-counter" data-counter-for="${safeId}">${countCharacters(value)}/${Number(maxLength)} 字</div>
-        </div>
+	    function countedTextarea({ id, value = '', readonly = false, maxLength = 300, minHeight = '', marker = '', errorMessage = '' }) {
+	      const safeId = escapeHtml(id);
+	      const style = minHeight ? ` style="min-height:${escapeHtml(minHeight)}"` : '';
+	      const markerAttr = marker ? ` ${marker}` : '';
+	      const errorAttr = errorMessage ? ` data-required-message="${escapeHtml(errorMessage)}"` : '';
+	      const errorId = `${safeId}-error`;
+	      return `
+	        <div class="control-wrap">
+	          <textarea id="${safeId}" maxlength="${Number(maxLength)}" data-counter-target="${safeId}" data-max-length="${Number(maxLength)}"${markerAttr}${errorAttr} aria-describedby="${errorId}" ${readonly ? 'disabled' : ''} class="confirm-control"${style}>${escapeHtml(value)}</textarea>
+	          <div id="${errorId}" class="field-error" data-error-for="${safeId}" aria-live="polite"></div>
+	          <div class="char-counter" data-counter-for="${safeId}">${countCharacters(value)}/${Number(maxLength)} 字</div>
+	        </div>
+	      `;
+	    }
+	    function countedInput({ key, value = '', readonly = false, maxLength = 30, marker = '', errorMessage = '' }) {
+	      const safeKey = escapeHtml(key);
+	      const markerAttr = marker ? ` ${marker}` : '';
+	      const errorAttr = errorMessage ? ` data-required-message="${escapeHtml(errorMessage)}"` : '';
+	      const errorId = `${safeKey}-error`;
+	      return `
+	        <div class="control-wrap">
+	          <input value="${escapeHtml(value)}" maxlength="${Number(maxLength)}" data-counter-target="${safeKey}" data-max-length="${Number(maxLength)}"${markerAttr}${errorAttr} aria-describedby="${errorId}" ${readonly ? 'disabled' : ''} class="confirm-control">
+	          <div id="${errorId}" class="field-error" data-error-for="${safeKey}" aria-live="polite"></div>
+	          <div class="char-counter" data-counter-for="${safeKey}">${countCharacters(value)}/${Number(maxLength)} 字</div>
+	        </div>
+	      `;
+	    }
+	    function fieldBlock({ title, hint, required = true, example = '', requiredTip = '', body }) {
+	      return `
+	        <section class="field-block">
+	          <div class="field-head">
+	            <h2 class="field-title">${escapeHtml(title)}${required ? requiredBadge() : ''}</h2>
+	            <p class="field-hint">${escapeHtml(hint || '')}</p>
+	            ${example || requiredTip ? `
+	              <div class="field-guide">
+	                ${example ? `<div class="field-guide-line example">${escapeHtml(example)}</div>` : ''}
+	                ${requiredTip ? `<div class="field-guide-line required-tip">${escapeHtml(requiredTip)}</div>` : ''}
+	              </div>
+	            ` : ''}
+	          </div>
+	          ${body}
+	        </section>
       `;
     }
-    function countedInput({ key, value = '', readonly = false, maxLength = 30, marker = '' }) {
-      const safeKey = escapeHtml(key);
-      const markerAttr = marker ? ` ${marker}` : '';
-      return `
-        <div class="control-wrap">
-          <input value="${escapeHtml(value)}" maxlength="${Number(maxLength)}" data-counter-target="${safeKey}" data-max-length="${Number(maxLength)}"${markerAttr} ${readonly ? 'disabled' : ''} class="confirm-control">
-          <div class="char-counter" data-counter-for="${safeKey}">${countCharacters(value)}/${Number(maxLength)} 字</div>
-        </div>
-      `;
-    }
-    function fieldBlock({ title, hint, required = true, body }) {
-      return `
-        <section class="field-block">
-          <div class="field-head">
-            <h2 class="field-title">${escapeHtml(title)}${required ? requiredMark() : ''}</h2>
-            <p class="field-hint">${escapeHtml(hint || '')}</p>
-          </div>
-          ${body}
-        </section>
-      `;
-    }
-    function buildLintelEditor(lintels = [], readonly) {
-      if (!lintels.length) return '';
-      return fieldBlock({
-        title: '楣板信息确认',
-        hint: '请确认现场楣板制作文字。中文楣板必填，英文楣板如有请填写；现场拆改将会收取拆改费。',
-        required: true,
-        body: `<div class="lintel-list">${lintels.map((lintel, index) => {
-          const locked = readonly || !lintel.can_external_edit;
-          const boothSlug = String(lintel.booth_code || 'booth').replace(/[^a-zA-Z0-9_-]+/g, '-');
-          const counterBase = `lintel-${index}-${boothSlug}`;
-          return `
+	    function buildLintelEditor(lintels = [], readonly) {
+	      if (!lintels.length) return '';
+	      return fieldBlock({
+	        title: '楣板信息确认',
+	        hint: '请确认现场楣板制作文字。中文楣板必填，英文楣板如有请填写；现场拆改将会收取拆改费。',
+	        required: !readonly,
+	        example: readonly ? '' : '中文楣板名将用于现场楣板制作，请按营业执照或确认后的参展名称逐字核对。',
+	        requiredTip: readonly ? '' : '每个可编辑展位都必须填写中文楣板名；英文名和备注可按需要填写。',
+	        body: `<div class="lintel-list">${lintels.map((lintel, index) => {
+	          const locked = readonly || !lintel.can_external_edit;
+	          const boothSlug = String(lintel.booth_code || 'booth').replace(/[^a-zA-Z0-9_-]+/g, '-');
+	          const counterBase = `lintel-${index}-${boothSlug}`;
+	          return `
             <div class="lintel-row" data-lintel-row data-booth-code="${escapeHtml(lintel.booth_code || '')}">
               <div class="lintel-top">
-                <div class="lintel-title">展位 ${escapeHtml(lintel.booth_code || '-')}</div>
-                ${lintel.external_lock_reason ? `<div class="lock-chip">${escapeHtml(lintel.external_lock_reason)}</div>` : ''}
-              </div>
-              <label class="control-label">中文楣板名 ${requiredMark()}</label>
-              ${countedInput({ key: `${counterBase}-zh`, value: lintel.name_zh || '', readonly: locked, maxLength: 30, marker: 'data-lintel-name-zh' })}
-              <label class="control-label">英文楣板名（如有）</label>
-              ${countedInput({ key: `${counterBase}-en`, value: lintel.name_en || '', readonly: locked, maxLength: 80, marker: 'data-lintel-name-en' })}
+	                <div class="lintel-title">展位 ${escapeHtml(lintel.booth_code || '-')}</div>
+	                ${lintel.external_lock_reason ? `<div class="lock-chip">${escapeHtml(lintel.external_lock_reason)}</div>` : ''}
+	              </div>
+	              <label class="control-label">中文楣板名 ${!locked ? requiredBadge() : ''}</label>
+	              ${!locked ? '<div class="control-guide">请逐字核对，避免错别字、简称误用或多余空格；提交后会锁定并下发制作。</div>' : ''}
+	              ${countedInput({ key: `${counterBase}-zh`, value: lintel.name_zh || '', readonly: locked, maxLength: 30, marker: 'data-lintel-name-zh', errorMessage: `请填写展位 ${lintel.booth_code || '-'} 的中文楣板名。` })}
+	              <label class="control-label">英文楣板名（如有）</label>
+	              ${countedInput({ key: `${counterBase}-en`, value: lintel.name_en || '', readonly: locked, maxLength: 80, marker: 'data-lintel-name-en' })}
               <label class="control-label">备注</label>
               ${countedTextarea({ id: `${counterBase}-remark`, value: lintel.remark || '', readonly: locked, maxLength: 120, minHeight: '84px', marker: 'data-lintel-remark' })}
             </div>
@@ -1019,11 +1458,11 @@
                       <div>信息收集已于 ${escapeHtml(deadlineText || '设置的截止时间')} 截止，当前页面仅供查看，不能再编辑或提交。如需处理，请联系组委会联系人。</div>
                     </div>
                   ` : `
-	                    <div class="notice">
-	                      ${noticeIcon()}
-	                      <div>${timeReminder}请重点核对带 <span class="required-mark">*</span> 的字段。提交后将无法自行修改，如需修改请联系组委会联系人重新开通编辑。</div>
-	                    </div>
-                  `}
+		                    <div class="notice">
+		                      ${noticeIcon()}
+		                      <div>${timeReminder}请重点核对带“必填”标识的字段。提交后将无法自行修改，如需修改请联系组委会联系人重新开通编辑。</div>
+		                    </div>
+	                  `}
                   </section>
                   <section class="content-panel readonly-panel">
                     <h2 class="panel-heading">基础信息</h2>
@@ -1034,22 +1473,44 @@
                       <h2 class="section-title">展位信息</h2>
                       ${buildBoothSummary(data.booth_rows || [])}
                     </section>
-                  </section>
-                  <section class="content-panel form-panel">
-                    <h2 class="panel-heading">信息填写</h2>
-                    <div class="field-grid">
-                      ${fieldBlock({
-                        title: '详细展品',
-                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
-                        required: true,
-                        body: countedTextarea({ id: 'main-business', value: order.main_business || '', readonly, maxLength: 300 })
-                      })}
-                      ${fieldBlock({
-                        title: '企业简介或产品亮点',
-                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
-                        required: true,
-                        body: countedTextarea({ id: 'profile', value: order.profile || '', readonly, maxLength: 300 })
-                      })}
+	                  </section>
+	                  <section class="content-panel form-panel">
+	                    <h2 class="panel-heading">信息填写</h2>
+	                    ${readonly ? '' : `
+	                      <div class="required-summary">
+	                        <span class="required-summary-icon" aria-hidden="true">*</span>
+	                        <div><strong>本页必填：</strong>详细展品、企业简介或产品亮点、中文楣板名。请先补全带“必填”标识的内容，再提交确认。</div>
+	                      </div>
+	                    `}
+	                    <div class="field-grid">
+	                      ${fieldBlock({
+	                        title: '详细展品',
+	                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
+	                        required: !readonly,
+	                        example: readonly ? '' : '可填写主营品类、核心产品、服务范围，建议具体到产品名称。',
+	                        requiredTip: readonly ? '' : '请至少填写一项明确展品或服务，避免只写“水产”“食品”等过于笼统的词。',
+	                        body: countedTextarea({
+	                          id: 'main-business',
+	                          value: order.main_business || '',
+	                          readonly,
+	                          maxLength: 300,
+	                          errorMessage: '请填写详细展品，例如主营品类、核心产品或服务范围。'
+	                        })
+	                      })}
+	                      ${fieldBlock({
+	                        title: '企业简介或产品亮点',
+	                        hint: '该信息将用于对外展示和供需对接等，如需修改请直接编辑。',
+	                        required: !readonly,
+	                        example: readonly ? '' : '可填写企业优势、产品卖点、供需对接信息，建议 1-3 句话。',
+	                        requiredTip: readonly ? '' : '请用完整语句描述企业或产品亮点，便于采购商和观众快速了解。',
+	                        body: countedTextarea({
+	                          id: 'profile',
+	                          value: order.profile || '',
+	                          readonly,
+	                          maxLength: 300,
+	                          errorMessage: '请填写企业简介或产品亮点，建议用 1-3 句话说明。'
+	                        })
+	                      })}
                     </div>
                     <div class="section">
                       ${buildLintelEditor(data.lintels || [], readonly)}
@@ -1063,10 +1524,11 @@
           </div>
         </div>
       `;
-	      startDeadlineCountdown();
-	      startDeadlineSettingsSync();
-        initFieldFeedback();
-    }
+		      startDeadlineCountdown();
+		      startDeadlineSettingsSync();
+	        initFieldFeedback();
+	        maybeShowEntryReminder(data);
+	    }
     async function loadOverview() {
       if (!state.token) {
         renderError('链接缺少安全令牌，请联系业务员重新获取。');
@@ -1078,8 +1540,12 @@
         renderError(error.message);
       }
     }
-    async function submitConfirmation() {
-      const mainBusinessControl = document.getElementById('main-business');
+	    async function submitConfirmation() {
+	      if (!state.reminderAcknowledged) {
+	        showEntryReminder(state.data);
+	        return;
+	      }
+	      const mainBusinessControl = document.getElementById('main-business');
       const profileControl = document.getElementById('profile');
       const lintelRows = Array.from(document.querySelectorAll('[data-lintel-row]'));
       const requiredControls = [
@@ -1087,10 +1553,11 @@
         profileControl,
         ...lintelRows.map((row) => row.querySelector('[data-lintel-name-zh]'))
       ];
-      if (markInvalidFields(requiredControls)) {
-        showInlineMessage('请先补全红框标出的必填字段。', 'error');
-        return;
-      }
+	      const missingRequiredCount = markInvalidFields(requiredControls);
+	      if (missingRequiredCount) {
+	        showInlineMessage(`还有 ${missingRequiredCount} 项必填未完成，请先补全红框标出的内容。`, 'error');
+	        return;
+	      }
       const mainBusiness = mainBusinessControl?.value?.trim() || '';
       const profile = profileControl?.value?.trim() || '';
       if (profile.length > 300) {

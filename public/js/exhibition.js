@@ -340,6 +340,9 @@ window.fillConfirmationSettingsForm = function(settings = window.exhibitionConfi
     const ttlMinutesInput = document.getElementById('confirmation-settings-ttl-minutes');
     const deadlineInput = document.getElementById('confirmation-settings-collection-deadline');
     const bannerInput = document.getElementById('confirmation-settings-banner-key');
+    const milestonesInput = document.getElementById('confirmation-settings-reminder-milestones');
+    const notesInput = document.getElementById('confirmation-settings-reminder-notes');
+    const submittedNotesInput = document.getElementById('confirmation-settings-submitted-reminder-notes');
     const previewImage = document.getElementById('confirmation-settings-banner-preview');
     const empty = document.getElementById('confirmation-settings-banner-empty');
     if (titleInput) titleInput.value = settings?.title_text || '请核对并确认参展信息';
@@ -352,6 +355,9 @@ window.fillConfirmationSettingsForm = function(settings = window.exhibitionConfi
     if (ttlMinutesInput) ttlMinutesInput.value = ttlMinutes;
     if (deadlineInput) deadlineInput.value = String(settings?.collection_deadline_at || '').trim().slice(0, 16).replace(' ', 'T');
     if (bannerInput) bannerInput.value = settings?.banner_image_key || '';
+    if (milestonesInput) milestonesInput.value = settings?.reminder_milestones_text || '';
+    if (notesInput) notesInput.value = settings?.reminder_notes_text || '';
+    if (submittedNotesInput) submittedNotesInput.value = settings?.submitted_reminder_notes_text || '';
     if (previewImage) {
         previewImage.src = settings?.banner_image_url || '';
         previewImage.classList.toggle('hidden', !settings?.banner_image_url);
@@ -437,6 +443,9 @@ window.saveConfirmationSettings = async function() {
         return;
     }
     const bannerImageKey = document.getElementById('confirmation-settings-banner-key')?.value?.trim() || '';
+    const reminderMilestonesText = document.getElementById('confirmation-settings-reminder-milestones')?.value?.trim() || '';
+    const reminderNotesText = document.getElementById('confirmation-settings-reminder-notes')?.value?.trim() || '';
+    const submittedReminderNotesText = document.getElementById('confirmation-settings-submitted-reminder-notes')?.value?.trim() || '';
     await window.withButtonLoading('btn-save-confirmation-settings', async () => {
         const data = await window.readApiSuccessJson(
             await window.apiFetch('/api/exhibition/confirmation-settings', {
@@ -446,7 +455,10 @@ window.saveConfirmationSettings = async function() {
                     title_text: titleText,
                     link_ttl_minutes: ttlMinutes,
                     collection_deadline_at: collectionDeadlineAt,
-                    banner_image_key: bannerImageKey
+                    banner_image_key: bannerImageKey,
+                    reminder_milestones_text: reminderMilestonesText,
+                    reminder_notes_text: reminderNotesText,
+                    submitted_reminder_notes_text: submittedReminderNotesText
                 })
             }),
             '保存确认链接设置失败',
