@@ -1,5 +1,25 @@
 # 备份、回滚与恢复 SOP
 
+## 0. 国内服务器 SQLite 备份
+
+国内服务器发布脚本会在部署前自动执行 `/opt/expo-server/scripts/backup-sqlite.sh`，默认备份目录为 `/var/backups/expo-server`。
+
+可在本机部署配置文件 `~/.config/fuzhou-fishery-expo/deploy.vps.env` 中调整备份保留策略：
+
+```bash
+# 保留 7 天内备份，同时至少保留最近 3 份
+VPS_BACKUP_RETENTION_DAYS=7
+VPS_BACKUP_RETENTION_MIN_COUNT=3
+
+# 备份目录总量超过 4096 MB 时，从最旧备份开始清理；0 表示不启用容量上限
+VPS_BACKUP_MAX_TOTAL_MB=4096
+
+# 默认仍备份上传文件；空间紧张且已有 NAS/对象存储副本时，可设为 0 只备份 SQLite
+VPS_BACKUP_FILE_STORAGE=1
+```
+
+`VPS_BACKUP_FILE_STORAGE=0` 时仍会生成一个空的 `expo-files.tar.gz` 兼容恢复流程，但该备份不包含 `/var/expo-files` 上传文件。启用前必须确认文件存储已有其他可靠副本。
+
 ## 1. D1 数据库备份
 
 ### 1.1 手动备份（推荐在高风险操作前执行）
