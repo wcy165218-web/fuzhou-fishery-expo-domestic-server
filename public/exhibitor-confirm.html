@@ -841,7 +841,7 @@
 	        flex-direction: column;
 	      }
 	      .field-grid > .field-block > .field-head {
-	        min-height: 300px;
+	        min-height: 178px;
 	      }
 	    }
 	    @media (max-width: 720px) {
@@ -1402,7 +1402,7 @@
 	        title: '楣板信息确认',
 	        hint: '请确认现场楣板制作文字。中文楣板必填，英文楣板如有请填写；现场拆改将会收取拆改费。',
 	        required: !readonly,
-	        example: readonly ? '' : '中文楣板名将用于现场楣板制作，请按营业执照或确认后的参展名称逐字核对。',
+	        example: readonly ? '' : '中文楣板名将用于现场楣板制作，请逐字核对填写。',
 	        requiredTip: readonly ? '' : '每个可编辑展位都必须填写中文楣板名；英文名和备注可按需要填写。',
 	        body: `<div class="lintel-list">${lintels.map((lintel, index) => {
 	          const locked = readonly || !lintel.can_external_edit;
