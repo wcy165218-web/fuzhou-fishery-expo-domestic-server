@@ -836,6 +836,13 @@
     }
 	    @media (min-width: 760px) {
 	      .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	      .field-grid > .field-block {
+	        display: flex;
+	        flex-direction: column;
+	      }
+	      .field-grid > .field-block > .field-head {
+	        min-height: 300px;
+	      }
 	    }
 	    @media (max-width: 720px) {
 	      .confirm-hero { min-height: 238px; padding: 28px 16px 92px; }
@@ -1034,7 +1041,7 @@
 		        <section class="entry-reminder-card ${collectionClosed ? 'closed' : 'milestones'}">
 		          ${reminderIcon(collectionClosed ? 'alert' : 'time')}
 		          <div>
-		            <div class="entry-reminder-card-title">${collectionClosed ? '信息收集截止时间' : '重要时间节点'}</div>
+		            <div class="entry-reminder-card-title">信息收集截止时间</div>
 		            <div class="entry-reminder-time">${escapeHtml(deadlineText)}</div>
 		            <div class="entry-reminder-chip">${collectionClosed ? '当前已截止，页面仅可查看' : (countdownText ? `距离截止还有 ${escapeHtml(countdownText)}` : '请联系组委会确认截止时间')}</div>
 		            ${supplementalMilestones ? `<div class="entry-reminder-extra entry-reminder-text">${supplementalMilestones}</div>` : ''}

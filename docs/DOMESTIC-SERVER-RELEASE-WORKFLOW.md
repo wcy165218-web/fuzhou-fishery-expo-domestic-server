@@ -134,6 +134,17 @@ npm run release:domestic:deploy
 /var/backups/expo-server
 ```
 
+如果服务器容量紧张，可以在 `~/.config/fuzhou-fishery-expo/deploy.vps.env` 设置备份保留策略，例如：
+
+```bash
+VPS_BACKUP_RETENTION_DAYS=7
+VPS_BACKUP_RETENTION_MIN_COUNT=3
+VPS_BACKUP_MAX_TOTAL_MB=4096
+VPS_BACKUP_FILE_STORAGE=1
+```
+
+`VPS_BACKUP_FILE_STORAGE=0` 会跳过 `/var/expo-files` 的完整归档，仅适合已经有 NAS 或对象存储备份上传文件的场景。
+
 更完整的备份和恢复说明见：
 
 ```text

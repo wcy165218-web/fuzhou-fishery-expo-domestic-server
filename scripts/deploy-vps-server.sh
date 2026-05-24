@@ -35,6 +35,10 @@ VPS_REMOTE_ENV_FILE=${VPS_REMOTE_ENV_FILE:-$VPS_SERVER_PATH/.env.production}
 VPS_INSTALL_PM2=${VPS_INSTALL_PM2:-1}
 VPS_PM2_SAVE=${VPS_PM2_SAVE:-1}
 VPS_PREDEPLOY_BACKUP=${VPS_PREDEPLOY_BACKUP:-1}
+VPS_BACKUP_RETENTION_DAYS=${VPS_BACKUP_RETENTION_DAYS:-14}
+VPS_BACKUP_RETENTION_MIN_COUNT=${VPS_BACKUP_RETENTION_MIN_COUNT:-3}
+VPS_BACKUP_MAX_TOTAL_MB=${VPS_BACKUP_MAX_TOTAL_MB:-0}
+VPS_BACKUP_FILE_STORAGE=${VPS_BACKUP_FILE_STORAGE:-1}
 LOCAL_GIT_REVISION=${LOCAL_GIT_REVISION:-$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}
 LOCAL_GIT_BRANCH=${LOCAL_GIT_BRANCH:-$(git -C "$PROJECT_ROOT" branch --show-current 2>/dev/null || echo unknown)}
 
@@ -215,12 +219,20 @@ remote_predeploy_guard_command() {
   local server_path=$(remote_quote "$REMOTE_SERVER_PATH")
   local env_file=$(remote_quote "$REMOTE_ENV_FILE")
   local predeploy_backup=$(remote_quote "$VPS_PREDEPLOY_BACKUP")
+  local backup_retention_days=$(remote_quote "$VPS_BACKUP_RETENTION_DAYS")
+  local backup_retention_min_count=$(remote_quote "$VPS_BACKUP_RETENTION_MIN_COUNT")
+  local backup_max_total_mb=$(remote_quote "$VPS_BACKUP_MAX_TOTAL_MB")
+  local backup_file_storage=$(remote_quote "$VPS_BACKUP_FILE_STORAGE")
 
   cat <<REMOTE
 set -euo pipefail
 server_path=${server_path}
 env_file=${env_file}
 predeploy_backup=${predeploy_backup}
+backup_retention_days=${backup_retention_days}
+backup_retention_min_count=${backup_retention_min_count}
+backup_max_total_mb=${backup_max_total_mb}
+backup_file_storage=${backup_file_storage}
 
 if [[ -f "\$env_file" ]]; then
   set -a
@@ -264,7 +276,7 @@ if [[ "\$predeploy_backup" == "1" ]]; then
       exit 1
     fi
     echo "[deploy:vps:server] running pre-deploy SQLite backup"
-    BACKUP_ENV_FILE="\$env_file" bash "\$server_path/scripts/backup-sqlite.sh"
+    RETENTION_DAYS="\$backup_retention_days" RETENTION_MIN_COUNT="\$backup_retention_min_count" BACKUP_MAX_TOTAL_MB="\$backup_max_total_mb" BACKUP_FILE_STORAGE="\$backup_file_storage" BACKUP_ENV_FILE="\$env_file" bash "\$server_path/scripts/backup-sqlite.sh"
   else
     echo "[deploy:vps:server] database not found yet; skipping pre-deploy backup"
   fi
