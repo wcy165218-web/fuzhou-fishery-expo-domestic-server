@@ -69,7 +69,14 @@ prune_backup_dir() {
     return 0
   fi
   log "pruning backup: $dir"
-  rm -rf "$dir"
+  if rm -rf "$dir"; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1 && sudo rm -rf "$dir"; then
+    return 0
+  fi
+  log "WARNING: unable to prune backup due to permissions: $dir"
+  return 0
 }
 
 apply_age_retention() {
