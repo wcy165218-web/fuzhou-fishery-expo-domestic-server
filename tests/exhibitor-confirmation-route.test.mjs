@@ -95,7 +95,7 @@ const ORDER_ROW = {
   exhibitor_info_confirmed_at: ''
 };
 
-function createConfirmationEnv({ settings = {} } = {}) {
+function createConfirmationEnv({ settings = {}, link = {} } = {}) {
   return createMockEnv({
     firstResponses: {
       'FROM Orders\n      WHERE id = ? AND project_id = ?': ORDER_ROW,
@@ -106,6 +106,9 @@ function createConfirmationEnv({ settings = {} } = {}) {
         banner_image_key: '',
         link_ttl_minutes: 30,
         collection_deadline_at: '',
+        reminder_milestones_text: '',
+        reminder_notes_text: '',
+        submitted_reminder_notes_text: '',
         ...settings,
         updated_at: '2026-05-04 09:00:00'
       },
@@ -120,7 +123,8 @@ function createConfirmationEnv({ settings = {} } = {}) {
         revoked_at: '',
         created_by: '张三',
         created_at: '2026-05-04 09:00:00',
-        updated_at: '2026-05-04 09:00:00'
+        updated_at: '2026-05-04 09:00:00',
+        ...link
       },
       'FROM ExhibitionLintels\n      WHERE project_id = ? AND order_id = ? AND booth_code = ?': {
         id: 0,
@@ -296,6 +300,76 @@ async function testSavingConfirmationSettingsRequiresCollectionDeadline() {
   assert.equal(env.captured.runCalls.some((call) => call.sql.includes('INSERT INTO ExhibitionConfirmationSettings')), false);
 }
 
+async function testSavingConfirmationSettingsPersistsReminderCopy() {
+  const env = createMockEnv({
+    firstResponses: {
+      'FROM ExhibitionConfirmationSettings\n      WHERE project_id = ?': {
+        project_id: 7,
+        title_text: '请核对并确认参展信息',
+        banner_image_key: '',
+        link_ttl_minutes: 1440,
+        collection_deadline_at: '2099-05-10 10:00:00',
+        reminder_milestones_text: '布展：5月9日',
+        reminder_notes_text: '请核对楣板',
+        submitted_reminder_notes_text: '如需修改请联系组委会',
+        updated_at: '2026-05-04 09:00:00'
+      }
+    }
+  });
+  const req = jsonRequest('http://localhost/api/exhibition/confirmation-settings', {
+    project_id: 7,
+    title_text: '请核对并确认参展信息',
+    banner_image_key: '',
+    link_ttl_minutes: 1440,
+    collection_deadline_at: '2099-05-10T10:00',
+    reminder_milestones_text: '布展：5月9日',
+    reminder_notes_text: '请核对楣板',
+    submitted_reminder_notes_text: '如需修改请联系组委会'
+  });
+  const res = await handleExhibitionRoutes({
+    request: req,
+    env,
+    url: new URL(req.url),
+    currentUser: { role: 'super_admin', name: 'admin' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.settings.reminder_milestones_text, '布展：5月9日');
+  assert.equal(body.settings.reminder_notes_text, '请核对楣板');
+  assert.equal(body.settings.submitted_reminder_notes_text, '如需修改请联系组委会');
+  const settingsUpsert = env.captured.runCalls.find((call) => call.sql.includes('INSERT INTO ExhibitionConfirmationSettings'));
+  assert.ok(settingsUpsert);
+  assert.equal(settingsUpsert.params[5], '布展：5月9日');
+  assert.equal(settingsUpsert.params[6], '请核对楣板');
+  assert.equal(settingsUpsert.params[7], '如需修改请联系组委会');
+}
+
+async function testSavingConfirmationSettingsRequiresSuperAdmin() {
+  const env = createMockEnv();
+  const req = jsonRequest('http://localhost/api/exhibition/confirmation-settings', {
+    project_id: 7,
+    title_text: '请核对并确认参展信息',
+    banner_image_key: '',
+    link_ttl_minutes: 1440,
+    collection_deadline_at: '2099-05-10T10:00',
+    reminder_milestones_text: '布展：5月9日',
+    reminder_notes_text: '请核对楣板',
+    submitted_reminder_notes_text: '如需修改请联系组委会'
+  });
+  const res = await handleExhibitionRoutes({
+    request: req,
+    env,
+    url: new URL(req.url),
+    currentUser: { role: 'user', name: '张三' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const body = await res.json();
+  assert.equal(res.status, 403);
+  assert.match(body.error, /超级管理员/);
+  assert.equal(env.captured.runCalls.some((call) => call.sql.includes('INSERT INTO ExhibitionConfirmationSettings')), false);
+}
+
 async function testPublicSubmitUpdatesOrderLintelAndLogsEvent() {
   const env = createConfirmationEnv();
   const req = jsonRequest('http://localhost/api/public/exhibitor-confirmations/test-token/submit', {
@@ -377,6 +451,36 @@ async function testPublicOverviewReadOnlyAfterCollectionDeadline() {
   assert.equal(res.status, 200);
   assert.equal(body.link.readonly, true);
   assert.equal(body.link.collection_closed, true);
+}
+
+async function testPublicOverviewIncludesReminderSettingsAndSubmittedState() {
+  const env = createConfirmationEnv({
+    settings: {
+      collection_deadline_at: '2099-05-10 10:00:00',
+      reminder_milestones_text: '布展：5月9日',
+      reminder_notes_text: '请核对楣板',
+      submitted_reminder_notes_text: '如需修改请联系组委会'
+    },
+    link: {
+      submitted_at: '2026-05-06 11:22:33'
+    }
+  });
+  const req = new Request('http://localhost/api/public/exhibitor-confirmations/test-token', { method: 'GET' });
+  const res = await handleExhibitionRoutes({
+    request: req,
+    env,
+    url: new URL(req.url),
+    currentUser: null,
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.settings.reminder_milestones_text, '布展：5月9日');
+  assert.equal(body.settings.reminder_notes_text, '请核对楣板');
+  assert.equal(body.settings.submitted_reminder_notes_text, '如需修改请联系组委会');
+  assert.equal(body.link.readonly, true);
+  assert.equal(body.link.submitted_at, '2026-05-06 11:22:33');
+  assert.equal(body.order.submitted_at, '2026-05-06 11:22:33');
 }
 
 async function testPublicOverviewSyncsLatestCollectionDeadlineSettings() {
@@ -628,10 +732,13 @@ async function run() {
   await testReusableShareLinkRefreshesExpiryFromCurrentSettings();
   await testSavingLinkTtlRefreshesActiveShareLinks();
   await testSavingConfirmationSettingsRequiresCollectionDeadline();
+  await testSavingConfirmationSettingsPersistsReminderCopy();
+  await testSavingConfirmationSettingsRequiresSuperAdmin();
   await testPublicSubmitUpdatesOrderLintelAndLogsEvent();
   await testPublicSubmitRejectsLongProfile();
   await testPublicSubmitBlockedAfterCollectionDeadline();
   await testPublicOverviewReadOnlyAfterCollectionDeadline();
+  await testPublicOverviewIncludesReminderSettingsAndSubmittedState();
   await testPublicOverviewSyncsLatestCollectionDeadlineSettings();
   await testReopenBlockedAfterCollectionDeadline();
   await testPublicSubmitRateLimitsByClientIp();

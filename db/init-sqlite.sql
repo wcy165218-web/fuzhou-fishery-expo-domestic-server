@@ -387,6 +387,9 @@ CREATE TABLE ExhibitionConfirmationSettings (
   banner_image_key TEXT NOT NULL DEFAULT '',
   link_ttl_minutes INTEGER NOT NULL DEFAULT 30,
   collection_deadline_at TEXT NOT NULL DEFAULT '',
+  reminder_milestones_text TEXT NOT NULL DEFAULT '',
+  reminder_notes_text TEXT NOT NULL DEFAULT '',
+  submitted_reminder_notes_text TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
 );

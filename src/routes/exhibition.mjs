@@ -197,6 +197,10 @@ function isConfirmationCollectionClosed(settings = {}) {
     return isChinaTimestampExpired(deadline);
 }
 
+function normalizeConfirmationReminderText(value) {
+    return String(value || '').trim();
+}
+
 function getPublicSubmitClientKey(request) {
     const headers = request?.headers;
     const forwardedFor = String(headers?.get?.('CF-Connecting-IP') || headers?.get?.('X-Forwarded-For') || headers?.get?.('X-Real-IP') || '').trim();
@@ -1800,8 +1804,12 @@ async function getProjectName(env, projectId) {
 async function getConfirmationSettings(env, projectId) {
     const nowText = getChinaTimestamp();
     await env.DB.prepare(`
-      INSERT OR IGNORE INTO ExhibitionConfirmationSettings (project_id, title_text, banner_image_key, link_ttl_minutes, collection_deadline_at, created_at, updated_at)
-      VALUES (?, '请核对并确认参展信息', '', ?, '', ?, ?)
+      INSERT OR IGNORE INTO ExhibitionConfirmationSettings (
+        project_id, title_text, banner_image_key, link_ttl_minutes, collection_deadline_at,
+        reminder_milestones_text, reminder_notes_text, submitted_reminder_notes_text,
+        created_at, updated_at
+      )
+      VALUES (?, '请核对并确认参展信息', '', ?, '', '', '', '', ?, ?)
     `).bind(projectId, DEFAULT_CONFIRMATION_LINK_TTL_MINUTES, nowText, nowText).run();
     const row = await env.DB.prepare(`
       SELECT *
@@ -1817,6 +1825,9 @@ async function getConfirmationSettings(env, projectId) {
         collection_deadline_at: normalizeConfirmationDeadlineAt(row?.collection_deadline_at),
         collection_deadline_display: formatConfirmationDeadlineDisplay(row?.collection_deadline_at),
         collection_closed: isConfirmationCollectionClosed(row),
+        reminder_milestones_text: normalizeConfirmationReminderText(row?.reminder_milestones_text),
+        reminder_notes_text: normalizeConfirmationReminderText(row?.reminder_notes_text),
+        submitted_reminder_notes_text: normalizeConfirmationReminderText(row?.submitted_reminder_notes_text),
         updated_at: String(row?.updated_at || '').trim()
     };
 }
@@ -1829,6 +1840,9 @@ async function saveConfirmationSettings(env, payload, corsHeaders) {
     const ttlMinutes = normalizeConfirmationLinkTtlMinutes(payload?.link_ttl_minutes);
     const collectionDeadlineAt = normalizeConfirmationDeadlineAt(payload?.collection_deadline_at);
     if (!collectionDeadlineAt) return errorResponse('请设置有效的信息收集截止时间', 400, corsHeaders);
+    const reminderMilestonesText = normalizeConfirmationReminderText(payload?.reminder_milestones_text);
+    const reminderNotesText = normalizeConfirmationReminderText(payload?.reminder_notes_text);
+    const submittedReminderNotesText = normalizeConfirmationReminderText(payload?.submitted_reminder_notes_text);
     const nowText = getChinaTimestamp();
     const previousSettings = await env.DB.prepare(`
       SELECT link_ttl_minutes
@@ -1837,15 +1851,33 @@ async function saveConfirmationSettings(env, payload, corsHeaders) {
     `).bind(projectId).first();
     const shouldRefreshActiveLinks = !previousSettings || normalizeConfirmationLinkTtlMinutes(previousSettings.link_ttl_minutes) !== ttlMinutes;
     await env.DB.prepare(`
-      INSERT INTO ExhibitionConfirmationSettings (project_id, title_text, banner_image_key, link_ttl_minutes, collection_deadline_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ExhibitionConfirmationSettings (
+        project_id, title_text, banner_image_key, link_ttl_minutes, collection_deadline_at,
+        reminder_milestones_text, reminder_notes_text, submitted_reminder_notes_text,
+        created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET
         title_text = excluded.title_text,
         banner_image_key = excluded.banner_image_key,
         link_ttl_minutes = excluded.link_ttl_minutes,
         collection_deadline_at = excluded.collection_deadline_at,
+        reminder_milestones_text = excluded.reminder_milestones_text,
+        reminder_notes_text = excluded.reminder_notes_text,
+        submitted_reminder_notes_text = excluded.submitted_reminder_notes_text,
         updated_at = excluded.updated_at
-    `).bind(projectId, titleText, bannerImageKey, ttlMinutes, collectionDeadlineAt, nowText, nowText).run();
+    `).bind(
+        projectId,
+        titleText,
+        bannerImageKey,
+        ttlMinutes,
+        collectionDeadlineAt,
+        reminderMilestonesText,
+        reminderNotesText,
+        submittedReminderNotesText,
+        nowText,
+        nowText
+    ).run();
     if (shouldRefreshActiveLinks) {
         await env.DB.prepare(`
           UPDATE ExhibitorConfirmationLinks
@@ -2236,7 +2268,7 @@ async function buildConfirmationOverviewPayload(env, order, { link = null, inclu
 	        events,
 	        link: link ? {
 	            submitted_at: String(link.submitted_at || '').trim(),
-            readonly: !!String(link.submitted_at || '').trim() || collectionClosed,
+            readonly: !!submittedAt || collectionClosed,
             collection_closed: collectionClosed,
             collection_deadline_at: settings.collection_deadline_at,
             collection_deadline_display: settings.collection_deadline_display

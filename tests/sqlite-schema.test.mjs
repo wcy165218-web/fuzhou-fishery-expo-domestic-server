@@ -123,7 +123,11 @@ const expectedIndexes = [
       ['rental_mode', 'usage_location', 'venue_confirmed', 'venue_confirmed_by', 'venue_confirmed_at']
     );
     assert.ok(listColumnNames(db, 'ExhibitionLintels').includes('business_confirm_source'));
-    assert.ok(listColumnNames(db, 'ExhibitionConfirmationSettings').includes('collection_deadline_at'));
+    const confirmationSettingsColumns = listColumnNames(db, 'ExhibitionConfirmationSettings');
+    assert.ok(confirmationSettingsColumns.includes('collection_deadline_at'));
+    assert.ok(confirmationSettingsColumns.includes('reminder_milestones_text'));
+    assert.ok(confirmationSettingsColumns.includes('reminder_notes_text'));
+    assert.ok(confirmationSettingsColumns.includes('submitted_reminder_notes_text'));
 
     db.database
       .prepare("INSERT INTO Staff (name, password, role) VALUES ('admin', 'hash', 'super_admin')")
