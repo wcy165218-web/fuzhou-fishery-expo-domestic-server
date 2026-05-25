@@ -187,6 +187,52 @@ async function testAddCommissionExpenseRejectsUnknownAgent() {
   assert.equal(body.error, '返佣支出必须选择代理商库中的有效代理商');
 }
 
+async function testAddSupplierExpenseAcceptsNewManualCategory() {
+  const env = createMockEnv({
+    firstResponses: {
+      'SELECT sales_name FROM Orders WHERE id = ?': { sales_name: 'sales01' }
+    }
+  });
+  const req = jsonRequest('http://localhost/api/add-expense', {
+    project_id: 1,
+    order_id: 3,
+    expense_type: '搭建费',
+    payee_name: '福州搭建服务商',
+    payee_channel: '转账',
+    amount: 1200,
+    applicant: 'sales01',
+    reason: '展位搭建费结算'
+  });
+  const res = await handleExpenseRoutes({ request: req, env, url: new URL(req.url), currentUser: SALES, corsHeaders: CORS });
+  const body = await res.json();
+  assert.equal(body.success, true);
+  const insertCall = env.captured.runCalls.find((call) => call.sql.includes('INSERT INTO Expenses'));
+  assert.equal(insertCall.params[2], '搭建费');
+}
+
+async function testAddExpenseRejectsManualRefundCategory() {
+  const env = createMockEnv({
+    firstResponses: {
+      'SELECT sales_name FROM Orders WHERE id = ?': { sales_name: 'sales01' }
+    }
+  });
+  const req = jsonRequest('http://localhost/api/add-expense', {
+    project_id: 1,
+    order_id: 3,
+    expense_type: '退款',
+    payee_name: '测试企业',
+    payee_channel: '转账',
+    amount: 500,
+    applicant: 'sales01',
+    reason: '手动退款'
+  });
+  const res = await handleExpenseRoutes({ request: req, env, url: new URL(req.url), currentUser: SALES, corsHeaders: CORS });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.error, '代付类别无效，请重新选择');
+  assert.equal(env.captured.runCalls.length, 0);
+}
+
 async function testDeleteCommissionExpenseReturnsDeletedExpenseSnapshot() {
   const env = createMockEnv({
     firstResponses: {
@@ -218,6 +264,8 @@ await testSubmitOrderCanonicalizesAgentName();
 await testUpdateCustomerInfoRejectsUnknownAgent();
 await testAddCommissionExpenseCanonicalizesAgentName();
 await testAddCommissionExpenseRejectsUnknownAgent();
+await testAddSupplierExpenseAcceptsNewManualCategory();
+await testAddExpenseRejectsManualRefundCategory();
 await testDeleteCommissionExpenseReturnsDeletedExpenseSnapshot();
 
 console.log('Agent integrity tests passed');

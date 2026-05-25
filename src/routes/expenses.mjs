@@ -4,6 +4,9 @@ import { errorResponse, internalErrorResponse } from '../utils/response.mjs';
 import { readJsonBody } from '../utils/request.mjs';
 import { invalidateHomeDashboardCache } from '../services/home-dashboard-cache.mjs';
 
+const MANUAL_EXPENSE_TYPES = new Set(['返佣支出', '搭建费', '展具费', '广告费', '采购形式返佣']);
+const SUPPLIER_EXPENSE_TYPES = new Set(['搭建费', '展具费', '广告费', '采购形式返佣']);
+
 export async function handleExpenseRoutes({
     request,
     env,
@@ -31,12 +34,16 @@ export async function handleExpenseRoutes({
             if (expense instanceof Response) return expense;
             const hasPermission = await canManageOrder(env, currentUser, expense.order_id);
             if (!hasPermission) return errorResponse('权限不足：不能操作他人订单支出', 403, corsHeaders);
-            const expenseType = String(expense.expense_type || '其他代付').trim() || '其他代付';
+            const expenseType = String(expense.expense_type || '').trim();
+            if (!MANUAL_EXPENSE_TYPES.has(expenseType)) return errorResponse('代付类别无效，请重新选择', 400, corsHeaders);
             let payeeName = String(expense.payee_name || '').trim();
             if (expenseType === '返佣支出') {
                 const agent = await findActiveAgentByName(env, expense.project_id, payeeName);
                 if (!agent) return errorResponse('返佣支出必须选择代理商库中的有效代理商', 400, corsHeaders);
                 payeeName = agent.name;
+            }
+            if (SUPPLIER_EXPENSE_TYPES.has(expenseType) && (!payeeName || !String(expense.reason || '').trim())) {
+                return errorResponse('事由和收款方为必填', 400, corsHeaders);
             }
             await env.DB.prepare(`
               INSERT INTO Expenses (project_id, order_id, expense_type, payee_name, payee_channel, payee_bank, payee_account, amount, applicant, reason, created_at)

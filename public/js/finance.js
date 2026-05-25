@@ -1,6 +1,8 @@
 // ================= js/finance.js =================
 window.selectedOrderExportIds = window.selectedOrderExportIds || new Set();
 window.orderExportSelectionProjectId = window.orderExportSelectionProjectId || '';
+window.manualExpenseTypes = ['返佣支出', '搭建费', '展具费', '广告费', '采购形式返佣'];
+window.supplierExpenseTypes = ['搭建费', '展具费', '广告费', '采购形式返佣'];
 
 window.buildOverpaymentActionsHtml = function(order, context = 'detail') {
     if (!window.canHandleOverpayment(order)) {
@@ -3130,16 +3132,16 @@ window.submitExpense = async function() {
     const amt = parseFloat(document.getElementById('exp-amount').value);
     const reason = document.getElementById('exp-reason').value.trim();
     if (!expenseType) return window.showToast("请选择代付类别！", 'error');
+    if (!window.manualExpenseTypes.includes(expenseType)) return window.showToast("代付类别无效，请重新选择！", 'error');
     if (expenseType === '返佣支出') {
         if (!payee) return window.showToast("返佣支出必须选择代理商！", 'error');
         const agentNames = window.getAgentOptions ? window.getAgentOptions() : [];
         if (!agentNames.includes(payee)) return window.showToast("收款人必须从代理商库中选择！", 'error');
     }
-    if (expenseType === '其他代付' && (!payee || !reason)) return window.showToast("事由和收款方为必填！", 'error');
-    if (expenseType === '退款' && !reason) return window.showToast("请填写退款事由！", 'error');
+    if (window.supplierExpenseTypes.includes(expenseType) && (!payee || !reason)) return window.showToast("事由和收款方为必填！", 'error');
     if (!amt || amt <= 0) return window.showToast("金额必须大于0！", 'error');
     const finalReason = expenseType === '返佣支出' ? `返佣支出` : reason;
-    const finalPayee = expenseType === '退款' ? (payee || '退款') : payee;
+    const finalPayee = payee;
     window.toggleBtnLoading('btn-submit-exp', true);
     try {
         const data = { project_id: pid, order_id: window.currentModalOrderId, expense_type: expenseType, fee_item_name: '总收款抵扣', payee_name: finalPayee, payee_channel: channel, payee_bank: '', payee_account: '', amount: amt, applicant: window.currentUser.name, reason: finalReason };
@@ -3195,7 +3197,7 @@ window.onExpenseTypeChange = function() {
     if (payeeSuggestionWrap) payeeSuggestionWrap.classList.add('hidden');
     if (agentSearchWrap) agentSearchWrap.classList.add('hidden');
     if (payeeInput) { payeeInput.readOnly = false; payeeInput.placeholder = '姓名或企业执照全称'; payeeInput.className = 'w-full border p-2 rounded'; }
-    if (reasonInput) reasonInput.placeholder = '如：展位搭建费结算 / 展具租赁 / 退款原因等';
+    if (reasonInput) reasonInput.placeholder = '如：展位搭建费结算 / 展具租赁 / 广告投放等';
 
     if (expType === '返佣支出') {
         // Return commission: payee from agent list only, no free reason input needed
@@ -3204,12 +3206,9 @@ window.onExpenseTypeChange = function() {
         if (agentSearchWrap) agentSearchWrap.classList.remove('hidden');
         if (payeeInput) { payeeInput.readOnly = true; payeeInput.placeholder = '搜索并选择代理商后自动带出'; payeeInput.value = ''; payeeInput.className = 'w-full border-2 border-blue-300 p-2 rounded bg-blue-50 font-bold text-blue-900'; }
         window.ensureAgentsLoaded?.();
-    } else if (expType === '其他代付') {
-        if (reasonInput) { reasonInput.placeholder = '如：展位搭建费、展具租赁等'; reasonInput.value = ''; }
+    } else if (window.supplierExpenseTypes.includes(expType)) {
+        if (reasonInput) { reasonInput.placeholder = '请填写具体代付事由'; reasonInput.value = ''; }
         if (payeeInput) payeeInput.placeholder = '收款人或供应商全称';
-    } else if (expType === '退款') {
-        if (reasonInput) reasonInput.placeholder = '请填写退款原因';
-        if (payeeInput) payeeInput.placeholder = '收款人（选填）';
     }
 }
 

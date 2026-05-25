@@ -1,5 +1,5 @@
 // ================= js/app.js =================
-const LOGIN_MODULE_SRC = './js/auth.js?v=20260519-booth-map-company-display-1';
+const LOGIN_MODULE_SRC = './js/auth.js?v=20260525-expense-type-options-1';
 let pendingLoginModuleLoad = null;
 
 function loadLoginModuleOnce() {
