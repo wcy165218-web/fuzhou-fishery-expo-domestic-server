@@ -75,6 +75,9 @@ assert.ok(html.includes('如有特殊要求请写明'), 'lintel editor should ex
 assert.ok(html.includes('id="confirmation-settings-reminder-milestones"'), 'confirmation settings should expose supplemental milestone copy');
 assert.ok(html.includes('id="confirmation-settings-reminder-notes"'), 'confirmation settings should expose pre-submit reminder copy');
 assert.ok(html.includes('id="confirmation-settings-submitted-reminder-notes"'), 'confirmation settings should expose submitted reminder copy');
+assert.ok(html.includes('id="btn-generate-sales-brief"'), 'home hall dashboard should expose a sales brief generation button');
+assert.ok(html.includes('id="sales-brief-modal"'), 'home dashboard should expose the sales brief modal');
+assert.ok(html.includes('id="home-sales-brief-textarea"'), 'sales brief modal should expose a readonly brief textarea');
 assert.ok(html.includes('value="lintel"'), 'booth map preview should expose a lintel-oriented filter mode');
 assert.ok(html.includes('id="bm-filter-lintel-group"'), 'booth map preview should expose lintel preview filters');
 assert.ok(!html.includes('./js/booth-map.js'), 'booth-map.js should not be eagerly loaded by index.html');

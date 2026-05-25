@@ -1662,6 +1662,90 @@ window.switchHomeHallInnerTab = function(tabId) {
     window.renderHomeHallTable(window.homeDashboardData?.hall_overview || [], window.homeDashboardData?.is_admin);
 }
 
+window.formatHomeBriefDateTime = function(date = new Date()) {
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}年${pad(date.getMonth() + 1)}月${pad(date.getDate())}日 ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+window.buildHomeSalesBriefTotals = function(halls = []) {
+    return (Array.isArray(halls) ? halls : []).reduce((acc, hall) => {
+        acc.configuredTotal += Number(hall.configured_total_booth_count || 0);
+        acc.landedOrders += Number(hall.landed_order_count || 0);
+        acc.fullPaidBooths += Number(hall.full_paid_booth_count || 0);
+        acc.depositBooths += Number(hall.deposit_booth_count || 0);
+        acc.reservedBooths += Number(hall.reserved_booth_count || 0);
+        acc.remainingUnsoldItems += Number(hall.remaining_unsold_booth_item_count || 0);
+        acc.remainingUnlanded += Number(hall.remaining_unlanded_booth_count || 0);
+        return acc;
+    }, {
+        configuredTotal: 0,
+        landedOrders: 0,
+        fullPaidBooths: 0,
+        depositBooths: 0,
+        reservedBooths: 0,
+        remainingUnsoldItems: 0,
+        remainingUnlanded: 0
+    });
+}
+
+window.buildHomeSalesBriefText = function(halls = [], generatedAt = new Date()) {
+    const rows = Array.isArray(halls) ? halls : [];
+    const fmtCount = window.formatCompactCount || ((value) => String(Number(value || 0)));
+    const project = window.getCurrentProject?.();
+    const projectName = project?.name || '当前项目';
+    const totals = window.buildHomeSalesBriefTotals(rows);
+    const lines = [
+        `${projectName}销售简报`,
+        `截止时间：${window.formatHomeBriefDateTime(generatedAt)}`,
+        '',
+        '按馆号统计：'
+    ];
+
+    rows.forEach((hall) => {
+        lines.push(`${hall.hall || '未分配展馆'}：设置展位数 ${fmtCount(hall.configured_total_booth_count)} 个，总计企业数 ${Number(hall.landed_order_count || 0)} 家，全款展位数 ${fmtCount(hall.full_paid_booth_count)} 个，定金展位数 ${fmtCount(hall.deposit_booth_count)} 个，预留展位数 ${fmtCount(hall.reserved_booth_count)} 个，未销售展位个数 ${Number(hall.remaining_unsold_booth_item_count || 0)} 个，未销售展位数 ${fmtCount(hall.remaining_unlanded_booth_count)} 个。`);
+    });
+
+    lines.push('');
+    lines.push(`总计：总计设置展位数 ${fmtCount(totals.configuredTotal)} 个，总计报名企业数 ${Number(totals.landedOrders || 0)} 家，总计全款展位数 ${fmtCount(totals.fullPaidBooths)} 个，总计定金展位数 ${fmtCount(totals.depositBooths)} 个，总计预留展位数 ${fmtCount(totals.reservedBooths)} 个，总计未销售展位个数 ${Number(totals.remainingUnsoldItems || 0)} 个，总计未销售展位数 ${fmtCount(totals.remainingUnlanded)} 个。`);
+    return lines.join('\n');
+}
+
+window.openHomeSalesBriefModal = function() {
+    const halls = window.homeDashboardData?.hall_overview || [];
+    if (!window.homeDashboardData?.is_admin) {
+        window.showToast?.('仅管理员可生成销售简报', 'error');
+        return;
+    }
+    if (!Array.isArray(halls) || halls.length === 0) {
+        window.showToast?.('当前项目暂无馆别经营数据，无法生成销售简报', 'error');
+        return;
+    }
+    const modal = document.getElementById('sales-brief-modal');
+    const textarea = document.getElementById('home-sales-brief-textarea');
+    if (!modal || !textarea) return;
+    textarea.value = window.buildHomeSalesBriefText(halls);
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        textarea.focus();
+        textarea.select();
+    }, 0);
+}
+
+window.copyHomeSalesBrief = async function() {
+    const textarea = document.getElementById('home-sales-brief-textarea');
+    const content = textarea?.value || '';
+    if (!content) {
+        window.showToast?.('没有可复制的销售简报', 'error');
+        return;
+    }
+    try {
+        await window.copyTextToClipboard(content);
+        window.showToast?.('销售简报已复制');
+    } catch (error) {
+        window.showToast?.(error.message || '复制失败，请手动复制', 'error');
+    }
+}
+
 window.renderHomeHallTable = function(halls, isAdmin) {
     const section = document.getElementById('home-hall-section');
     const container = document.getElementById('home-hall-table');

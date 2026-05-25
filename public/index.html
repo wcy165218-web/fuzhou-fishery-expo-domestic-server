@@ -1085,6 +1085,27 @@
         </div>
     </div>
 
+    <div id="sales-brief-modal" class="hidden fixed inset-0 bg-black/55 z-[90] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800">销售简报</h3>
+                    <p class="text-xs text-slate-500 mt-1">文字版简报可直接复制发送。</p>
+                </div>
+                <button onclick="window.closeModal('sales-brief-modal')" class="modal-close-btn" aria-label="关闭销售简报">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <textarea id="home-sales-brief-textarea" readonly rows="14" class="w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400"></textarea>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" onclick="window.closeModal('sales-brief-modal')" class="btn-secondary px-4 py-2 text-sm">关闭</button>
+                    <button id="btn-copy-sales-brief" type="button" onclick="window.copyHomeSalesBrief()" class="btn-primary px-4 py-2 text-sm">复制简报</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="overpayment-modal" class="hidden fixed inset-0 bg-black/55 z-[80] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
             <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl flex items-center justify-between">
@@ -1601,7 +1622,13 @@
                                                 <span>按馆号统计经营情况</span>
                                             </h3>
                                         </div>
-                                        <div class="text-xs text-gray-500">仅超级管理员、管理员可查看全部馆号经营情况。</div>
+                                        <div class="flex flex-col items-start md:items-end gap-2">
+                                            <button id="btn-generate-sales-brief" type="button" onclick="window.openHomeSalesBriefModal()" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800 transition">
+                                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                                                <span>生成销售简报</span>
+                                            </button>
+                                            <div class="text-xs text-gray-500">仅超级管理员、管理员可查看全部馆号经营情况。</div>
+                                        </div>
                                     </div>
                                         <div id="home-hall-table" class="overflow-x-auto"></div>
                                     </div>

@@ -584,6 +584,21 @@ window.fetchWithAuth = async function(url, options = {}) {
     return fetch(url, requestOptions);
 }
 
+window.copyTextToClipboard = async function(text) {
+    const content = String(text || '');
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+        return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = content;
+    textarea.className = 'fixed left-[-9999px] top-[-9999px]';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+}
+
 function getOrderAuthUser(user = null) {
     return user || window.getCurrentAuthUser?.() || window.currentUser || currentUser || null;
 }
