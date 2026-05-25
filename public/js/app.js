@@ -1,5 +1,5 @@
 // ================= js/app.js =================
-const LOGIN_MODULE_SRC = './js/auth.js?v=20260525-expense-type-options-1';
+const LOGIN_MODULE_SRC = './js/auth.js?v=20260525-responsive-scroll-qq-1';
 let pendingLoginModuleLoad = null;
 
 function loadLoginModuleOnce() {
@@ -59,11 +59,7 @@ function scheduleResponsiveTableRefresh() {
 }
 
 function getResponsiveTableScrollWidth(target) {
-    const table = target?.querySelector?.('table');
-    return Math.max(
-        Number(target?.scrollWidth || 0),
-        Number(table?.scrollWidth || 0)
-    );
+    return Number(target?.scrollWidth || 0);
 }
 
 function initResponsiveTableScroller(target) {
@@ -109,7 +105,6 @@ function initResponsiveTableScroller(target) {
     control.appendChild(proxyWrap);
     target.parentNode?.insertBefore(control, target);
 
-    let syncing = false;
     let dragging = false;
     let dragThumbOffset = 0;
 
@@ -129,26 +124,11 @@ function initResponsiveTableScroller(target) {
     };
 
     const syncProxyFromTarget = () => {
-        if (syncing) return;
-        syncing = true;
         const targetMax = Math.max(0, target.scrollWidth - target.clientWidth);
         const proxyMax = Math.max(0, proxy.scrollWidth - proxy.clientWidth);
         if (targetMax > 0 && proxyMax > 0) {
             proxy.scrollLeft = (target.scrollLeft / targetMax) * proxyMax;
         }
-        syncing = false;
-        updateVisualThumb();
-    };
-
-    const syncTargetFromProxy = () => {
-        if (syncing) return;
-        syncing = true;
-        const targetMax = Math.max(0, target.scrollWidth - target.clientWidth);
-        const proxyMax = Math.max(0, proxy.scrollWidth - proxy.clientWidth);
-        if (targetMax > 0 && proxyMax > 0) {
-            target.scrollLeft = (proxy.scrollLeft / proxyMax) * targetMax;
-        }
-        syncing = false;
         updateVisualThumb();
     };
 
@@ -193,7 +173,6 @@ function initResponsiveTableScroller(target) {
 
     target.__refreshResponsiveTableScroller = refresh;
     target.addEventListener('scroll', syncProxyFromTarget, { passive: true });
-    proxy.addEventListener('scroll', syncTargetFromProxy, { passive: true });
     const onDragMove = (event) => {
         if (!dragging) return;
         setTargetScrollFromTrack(event.clientX, dragThumbOffset);

@@ -53,7 +53,7 @@ window.activeWorkbenchTabId = window.activeWorkbenchTabId || '';
 window.workbenchTabHistory = Array.isArray(window.workbenchTabHistory) ? window.workbenchTabHistory : [];
 window.pendingWorkbenchProjectId = window.pendingWorkbenchProjectId || '';
 
-const FEATURE_SCRIPT_VERSION = '20260525-expense-type-options-1';
+const FEATURE_SCRIPT_VERSION = '20260525-responsive-scroll-qq-1';
 const lazyFeatureScriptManifest = {
     'booth-map': {
         scripts: [`./js/booth-map.js?v=${FEATURE_SCRIPT_VERSION}`],
