@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const exhibitorConfirmHtml = readFileSync(new URL('../public/exhibitor-confirm.html', import.meta.url), 'utf8');
+const appSource = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 
 function findMainContentCloseIndex(source) {
   const mainOpen = source.match(/<div\b[^>]*\bid=["']main-content["'][^>]*>/i);
@@ -78,6 +79,8 @@ assert.ok(html.includes('id="confirmation-settings-submitted-reminder-notes"'), 
 assert.ok(html.includes('id="btn-generate-sales-brief"'), 'home hall dashboard should expose a sales brief generation button');
 assert.ok(html.includes('id="sales-brief-modal"'), 'home dashboard should expose the sales brief modal');
 assert.ok(html.includes('id="home-sales-brief-textarea"'), 'sales brief modal should expose a readonly brief textarea');
+assert.ok(html.includes('pointer-events: none;'), 'responsive table proxy should not capture drag input above the visual scrollbar');
+assert.ok(!appSource.includes("proxy.addEventListener('scroll'"), 'responsive table proxy should not write asynchronous scroll events back to the table');
 assert.ok(html.includes('value="lintel"'), 'booth map preview should expose a lintel-oriented filter mode');
 assert.ok(html.includes('id="bm-filter-lintel-group"'), 'booth map preview should expose lintel preview filters');
 assert.ok(!html.includes('./js/booth-map.js'), 'booth-map.js should not be eagerly loaded by index.html');
