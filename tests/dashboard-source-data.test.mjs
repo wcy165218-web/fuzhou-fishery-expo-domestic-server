@@ -172,14 +172,32 @@ async function runTests() {
             }
             if (sql.includes('FROM Orders') && sql.includes("status = '正常'")) {
               return {
-                results: Array.from({ length: 20 }, (_, index) => ({
-                  id: index + 1,
-                  booth_id: '3F27',
-                  area: 10.8,
-                  total_booth_fee: 1000,
-                  total_amount: 1000,
-                  paid_amount: 1000
-                }))
+                results: [
+                  ...Array.from({ length: 20 }, (_, index) => ({
+                    id: index + 1,
+                    booth_id: '3F27',
+                    area: 10.8,
+                    total_booth_fee: 1000,
+                    total_amount: 1000,
+                    paid_amount: 1000
+                  })),
+                  {
+                    id: 21,
+                    booth_id: '3F27',
+                    area: 0,
+                    total_booth_fee: 0,
+                    total_amount: 0,
+                    paid_amount: 0
+                  },
+                  {
+                    id: 22,
+                    booth_id: '3F28',
+                    area: 9,
+                    total_booth_fee: 1000,
+                    total_amount: 1000,
+                    paid_amount: 0
+                  }
+                ]
               };
             }
             return { results: [] };
@@ -193,13 +211,15 @@ async function runTests() {
   assert.equal(hallOverview[0].configured_total_booth_count, 44);
   assert.equal(hallOverview[0].received_booth_count, 24);
   assert.equal(hallOverview[0].received_ground_booth_count, 24);
-  assert.equal(hallOverview[0].charged_booth_count, 24);
-  assert.equal(hallOverview[0].landed_booth_count, 24);
+  assert.equal(hallOverview[0].charged_booth_count, 25);
+  assert.equal(hallOverview[0].landed_booth_count, 25);
+  assert.equal(hallOverview[0].reserved_booth_count, 1);
   assert.equal(hallOverview[0].full_paid_booth_count, 24);
-  assert.equal(hallOverview[0].remaining_unsold_booth_item_count, 1);
-  assert.equal(hallOverview[0].remaining_unlanded_booth_count, 20);
-  assert.equal(hallOverview[0].received_company_count, 20);
-  assert.equal(hallOverview[0].landed_order_count, 20);
+  assert.equal(hallOverview[0].remaining_unsold_booth_count, 19);
+  assert.equal(hallOverview[0].remaining_unsold_booth_item_count, 0);
+  assert.equal(hallOverview[0].remaining_unlanded_booth_count, 19);
+  assert.equal(hallOverview[0].received_company_count, 21);
+  assert.equal(hallOverview[0].landed_order_count, 22);
 }
 
 await runTests();

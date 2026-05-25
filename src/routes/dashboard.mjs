@@ -451,7 +451,7 @@ export function buildHallOverviewFromAggregateRows(configRows = [], orderRows = 
             received_ground_booth_count: toRoundedNumber(hall.received_ground_booth_count),
             received_booth_count: toRoundedNumber(hall.received_booth_count),
             received_booth_rate: hall.configured_booth_count > 0 ? toRoundedNumber((hall.received_booth_count / hall.configured_booth_count) * 100, 1) : 0,
-            remaining_unsold_booth_count: toRoundedNumber(Math.max(hall.configured_booth_count - hall.received_booth_count, 0)),
+            remaining_unsold_booth_count: toRoundedNumber(Math.max(hall.configured_booth_count - hall.landed_booth_count, 0)),
             received_company_count: Number(hall.received_company_count || 0),
             receivable_total: toRoundedNumber(hall.receivable_total),
             received_total: toRoundedNumber(hall.received_total),
@@ -588,8 +588,7 @@ export async function getHallOverviewRows(env, projectId) {
         if (!booths.length) return;
         const totalArea = Number(booths.reduce((sum, booth) => sum + Number(booth.area || 0), 0).toFixed(2));
         const equalShare = booths.length > 0 ? 1 / booths.length : 0;
-        const orderArea = Number(order.area || 0);
-        const effectiveOrderArea = orderArea > 0 ? orderArea : totalArea;
+        const effectiveOrderArea = Number(order.area || 0);
         const paidAmount = Number(order.paid_amount || 0);
         const totalAmount = Number(order.total_amount || 0);
         const totalBoothFee = Number(order.total_booth_fee || 0);
