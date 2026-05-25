@@ -389,7 +389,8 @@ export function buildHallOverviewFromAggregateRows(configRows = [], orderRows = 
         full_paid_booth_count: 0,
         full_paid_order_count: 0,
         landed_booth_count: 0,
-        landed_order_count: 0
+        landed_order_count: 0,
+        remaining_unsold_booth_item_count: 0
     });
 
     const hallMap = {};
@@ -404,7 +405,8 @@ export function buildHallOverviewFromAggregateRows(configRows = [], orderRows = 
             ground_booth_count: toRoundedNumber(row.ground_booth_count),
             standard_row_count: Number(row.standard_row_count || 0),
             standard_area: toRoundedNumber(row.standard_area),
-            standard_booth_count: toRoundedNumber(row.standard_booth_count)
+            standard_booth_count: toRoundedNumber(row.standard_booth_count),
+            remaining_unsold_booth_item_count: Number(row.remaining_unsold_booth_item_count || 0)
         });
     });
 
@@ -433,7 +435,8 @@ export function buildHallOverviewFromAggregateRows(configRows = [], orderRows = 
             full_paid_booth_count: toRoundedNumber(row.full_paid_booth_count),
             full_paid_order_count: Number(row.full_paid_order_count || 0),
             landed_booth_count: toRoundedNumber(row.landed_booth_count),
-            landed_order_count: Number(row.landed_order_count || 0)
+            landed_order_count: Number(row.landed_order_count || 0),
+            remaining_unsold_booth_item_count: Number(row.remaining_unsold_booth_item_count || hallMap[hall].remaining_unsold_booth_item_count || 0)
         });
     });
 
@@ -474,6 +477,7 @@ export function buildHallOverviewFromAggregateRows(configRows = [], orderRows = 
             landed_booth_count: toRoundedNumber(hall.landed_booth_count),
             landed_order_count: Number(hall.landed_order_count || 0),
             remaining_unlanded_booth_count: toRoundedNumber(Math.max(hall.configured_booth_count - hall.landed_booth_count, 0)),
+            remaining_unsold_booth_item_count: Number(hall.remaining_unsold_booth_item_count || 0),
             full_paid_booth_rate: hall.configured_booth_count > 0 ? toRoundedNumber((hall.full_paid_booth_count / hall.configured_booth_count) * 100, 1) : 0,
             unreceived_booth_fee: toRoundedNumber(Math.max(hall.receivable_booth_fee - hall.received_booth_fee, 0))
         }))
@@ -505,7 +509,7 @@ export async function getHallOverviewRows(env, projectId) {
     `).bind(normalizedProjectId).all()).results || []);
     const boothMetaMap = new Map(
         boothRows.map((row) => [
-            String(row.id || '').trim(),
+            String(row.id || '').trim().toUpperCase(),
             {
                 hall: String(row.hall || '未分配展馆').trim() || '未分配展馆',
                 type: String(row.type || '').trim(),
@@ -525,6 +529,25 @@ export async function getHallOverviewRows(env, projectId) {
       WHERE project_id = ?
         AND status = '正常'
     `).bind(normalizedProjectId).all()).results || []);
+
+    const occupiedBoothIds = new Set();
+    activeOrderRows.forEach((order) => {
+        splitBoothCodeList(order.booth_id).forEach((boothId) => occupiedBoothIds.add(boothId));
+    });
+    const remainingUnsoldItemCountByHall = boothRows.reduce((acc, booth) => {
+        const boothId = String(booth.id || '').trim().toUpperCase();
+        if (!boothId || occupiedBoothIds.has(boothId)) return acc;
+        const hall = String(booth.hall || '未分配展馆').trim() || '未分配展馆';
+        acc[hall] = Number(acc[hall] || 0) + 1;
+        return acc;
+    }, {});
+    const configRowsWithUnsoldItems = configRows.map((row) => {
+        const hall = String(row.hall || '未分配展馆').trim() || '未分配展馆';
+        return {
+            ...row,
+            remaining_unsold_booth_item_count: Number(remainingUnsoldItemCountByHall[hall] || 0)
+        };
+    });
 
     const hallStatsMap = {};
     const ensureHallStat = (hall) => {
@@ -561,7 +584,7 @@ export async function getHallOverviewRows(env, projectId) {
     activeOrderRows.forEach((order) => {
         const boothIds = splitBoothCodeList(order.booth_id);
         if (!boothIds.length) return;
-        const booths = boothIds.map((boothId) => boothMetaMap.get(String(boothId || '').trim())).filter(Boolean);
+        const booths = boothIds.map((boothId) => boothMetaMap.get(String(boothId || '').trim().toUpperCase())).filter(Boolean);
         if (!booths.length) return;
         const totalArea = Number(booths.reduce((sum, booth) => sum + Number(booth.area || 0), 0).toFixed(2));
         const equalShare = booths.length > 0 ? 1 / booths.length : 0;
@@ -648,7 +671,7 @@ export async function getHallOverviewRows(env, projectId) {
         landed_order_count: stat.landed_order_ids.size
     }));
 
-    return buildHallOverviewFromAggregateRows(configRows, orderRows);
+    return buildHallOverviewFromAggregateRows(configRowsWithUnsoldItems, orderRows);
 }
 
 export function buildRegionOverviewFromAggregateRows(regionRows = []) {

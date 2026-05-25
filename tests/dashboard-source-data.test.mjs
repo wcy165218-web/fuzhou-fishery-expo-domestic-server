@@ -151,10 +151,10 @@ async function runTests() {
                 results: [
                   {
                     hall: '3号馆',
-                    configured_booth_count: 24,
-                    ground_row_count: 1,
-                    ground_area: 216,
-                    ground_booth_count: 24,
+                    configured_booth_count: 44,
+                    ground_row_count: 2,
+                    ground_area: 396,
+                    ground_booth_count: 44,
                     standard_row_count: 0,
                     standard_area: 0,
                     standard_booth_count: 0
@@ -165,7 +165,8 @@ async function runTests() {
             if (sql.includes('SELECT id, hall, type, area') && sql.includes('FROM Booths')) {
               return {
                 results: [
-                  { id: '3F27', hall: '3号馆', type: '光地', area: 216 }
+                  { id: '3F27', hall: '3号馆', type: '光地', area: 216 },
+                  { id: '3F28', hall: '3号馆', type: '光地', area: 180 }
                 ]
               };
             }
@@ -189,13 +190,14 @@ async function runTests() {
   };
   const hallOverview = await getHallOverviewRows(hallEnv, 7);
   assert.equal(hallOverview.length, 1);
-  assert.equal(hallOverview[0].configured_total_booth_count, 24);
+  assert.equal(hallOverview[0].configured_total_booth_count, 44);
   assert.equal(hallOverview[0].received_booth_count, 24);
   assert.equal(hallOverview[0].received_ground_booth_count, 24);
   assert.equal(hallOverview[0].charged_booth_count, 24);
   assert.equal(hallOverview[0].landed_booth_count, 24);
   assert.equal(hallOverview[0].full_paid_booth_count, 24);
-  assert.equal(hallOverview[0].remaining_unlanded_booth_count, 0);
+  assert.equal(hallOverview[0].remaining_unsold_booth_item_count, 1);
+  assert.equal(hallOverview[0].remaining_unlanded_booth_count, 20);
   assert.equal(hallOverview[0].received_company_count, 20);
   assert.equal(hallOverview[0].landed_order_count, 20);
 }
