@@ -392,6 +392,11 @@ CREATE TABLE ExhibitionRefrigeratorRentals (
   organizer_payment_total REAL NOT NULL DEFAULT 0,
   venue_payment_total REAL NOT NULL DEFAULT 0,
   total_amount REAL NOT NULL DEFAULT 0,
+  rental_mode TEXT NOT NULL DEFAULT 'booth',
+  usage_location TEXT NOT NULL DEFAULT '',
+  venue_confirmed INTEGER NOT NULL DEFAULT 0,
+  venue_confirmed_by TEXT NOT NULL DEFAULT '',
+  venue_confirmed_at TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
   UNIQUE(project_id, company_name)

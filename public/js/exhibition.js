@@ -1123,7 +1123,7 @@ window.renderRefrigeratorCompanyResults = function() {
 };
 
 window.scheduleExhibitionCompanySearch = function() {
-    if (window.currentRefrigeratorRentalEditingId || window.isNoBoothRefrigeratorRentalMode()) return;
+    if (window.isNoBoothRefrigeratorRentalMode()) return;
     if (window.exhibitionCompanySearchTimer) {
         clearTimeout(window.exhibitionCompanySearchTimer);
     }
@@ -1135,7 +1135,7 @@ window.scheduleExhibitionCompanySearch = function() {
 };
 
 window.searchExhibitionCompanies = async function() {
-    if (window.currentRefrigeratorRentalEditingId || window.isNoBoothRefrigeratorRentalMode()) return;
+    if (window.isNoBoothRefrigeratorRentalMode()) return;
     const projectId = window.getExhibitionProjectId();
     if (!projectId) return;
     const keyword = document.getElementById('refrigerator-company-search-input')?.value?.trim() || '';
@@ -1328,14 +1328,16 @@ window.renderRefrigeratorRentalEditor = function() {
     mode.innerText = isEditing
         ? (isNoBoothMode
             ? '当前正在编辑无展位租赁记录；企业名称和使用地点可继续手动调整，冰柜明细与付款方式保持按行保存。'
-            : '当前正在编辑已存在的企业租赁记录；企业主体、馆号、展位号和归属业务员保持与订单聚合结果一致。')
+            : '当前正在编辑已存在的订单租赁记录；可在企业搜索输入区重新选择订单主体，保存后会按新主体更新馆号、展位号和归属业务员。')
         : (isNoBoothMode
             ? '当前为无展位租赁模式。无需从参展列表搜索企业，直接手动填写企业名称和冰柜使用地点，再按行添加冰柜明细即可。'
             : '先在蓝色搜索区输入并选中一个企业，再按行选择冰柜类型、填写数量和付款方式后保存。企业若已经存在租赁记录，会自动转到该企业明细修改。');
-    companyInput.disabled = isEditing || isNoBoothMode;
-    companyInput.placeholder = isNoBoothMode ? '无展位租赁模式下无需搜索企业' : '输入企业名称后，从结果中选择';
+    companyInput.disabled = isNoBoothMode;
+    companyInput.placeholder = isNoBoothMode
+        ? '无展位租赁模式下无需搜索企业'
+        : (isEditing ? '输入企业名称后，从订单结果中重新选择租赁主体' : '输入企业名称后，从结果中选择');
     companyTip.classList.toggle('hidden', !(isEditing && !isNoBoothMode));
-    companyTip.innerText = '当前为已存在企业租赁记录编辑态，企业主体不可切换。';
+    companyTip.innerText = '当前为订单租赁记录编辑态，可重新搜索并选择当前项目订单企业作为租赁主体。';
     normalModeButton.disabled = isEditing;
     noBoothModeButton.disabled = isEditing;
     normalModeButton.className = window.getCurrentRefrigeratorRentalMode() === 'booth'
@@ -1347,10 +1349,10 @@ window.renderRefrigeratorRentalEditor = function() {
     searchShell.classList.toggle('hidden', isNoBoothMode);
     searchResults.classList.toggle('hidden', isNoBoothMode);
     manualShell.classList.toggle('hidden', !isNoBoothMode);
-    summaryTitle.innerText = isNoBoothMode ? '当前保存主体信息' : '已选企业信息';
+    summaryTitle.innerText = isNoBoothMode ? '当前保存主体信息' : (isEditing ? '当前订单租赁主体信息' : '已选企业信息');
     summaryHint.innerText = isNoBoothMode
         ? '这里展示的是你手动填写后将随整单一起保存的主体信息。'
-        : '这里展示的是已选企业信息；真正的搜索输入框在上方蓝色区域。';
+        : (isEditing ? '这里展示的是当前订单主体信息；如需调整，可在上方搜索框重新选择订单企业。' : '这里展示的是已选企业信息；真正的搜索输入框在上方蓝色区域。');
     if (saveButton) {
         saveButton.disabled = !!window.currentRefrigeratorRentalVenueConfirmed;
         saveButton.classList.toggle('opacity-60', !!window.currentRefrigeratorRentalVenueConfirmed);
@@ -1368,6 +1370,7 @@ window.openNewRefrigeratorRental = async function() {
     window.currentRefrigeratorRentalEditingId = 0;
     window.currentRefrigeratorRentalCompany = null;
     window.currentRefrigeratorRentalMode = 'booth';
+    window.currentRefrigeratorRentalVenueConfirmed = false;
     window.currentRefrigeratorRentalItems = [];
     window.resetRefrigeratorRentalDraft();
     window.currentRefrigeratorRentalCatalog = window.getFilteredRefrigeratorCatalog(window.exhibitionRefrigeratorConfigs);
@@ -1537,6 +1540,11 @@ window.loadRefrigeratorRentalDetail = async function(rentalId) {
     });
     window.resetRefrigeratorRentalDraft();
     window.currentRefrigeratorRentalCatalog = window.getFilteredRefrigeratorCatalog(Array.isArray(data?.configs) ? data.configs : []);
+    window.resetRefrigeratorRentalSearchState(
+        window.isNoBoothRefrigeratorRentalMode()
+            ? '无展位租赁可直接维护企业名称和使用地点'
+            : '如需调整订单租赁主体，可在上方重新搜索并选择企业'
+    );
     window.isRefrigeratorRentalEditorOpen = true;
     window.renderRefrigeratorRentalEditor();
 };

@@ -7,6 +7,7 @@ import { createD1SqliteDatabase } from '../src/adapter/db.mjs';
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const initSql = fs.readFileSync(path.join(repoRoot, 'db/init-sqlite.sql'), 'utf8');
 const dropSql = fs.readFileSync(path.join(repoRoot, 'db/drop-sqlite.sql'), 'utf8');
+const localBootstrapSql = fs.readFileSync(path.join(repoRoot, 'db/local/20260320-1200-local-test-bootstrap.sql'), 'utf8');
 
 function createTempDatabase() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'expo-sqlite-schema-'));
@@ -165,6 +166,21 @@ const expectedIndexes = [
 
     db.database.exec(dropSql);
     assert.deepEqual(listTableNames(db), []);
+  } finally {
+    cleanup();
+  }
+}
+
+{
+  const { db, cleanup } = createTempDatabase();
+  try {
+    db.database.exec(localBootstrapSql);
+    assert.deepEqual(
+      listColumnNames(db, 'ExhibitionRefrigeratorRentals').filter((name) => (
+        ['rental_mode', 'usage_location', 'venue_confirmed', 'venue_confirmed_by', 'venue_confirmed_at'].includes(name)
+      )),
+      ['rental_mode', 'usage_location', 'venue_confirmed', 'venue_confirmed_by', 'venue_confirmed_at']
+    );
   } finally {
     cleanup();
   }
