@@ -238,6 +238,7 @@ export function buildErpSyncPlan({
   rows = [],
   orders = [],
   existingErpIds = [],
+  existingErpPayments = [],
   existingRefundErpIds = [],
   expectedProjectName = '',
   expectedProjectId = ''
@@ -251,6 +252,13 @@ export function buildErpSyncPlan({
   });
 
   const knownPaymentErpIds = new Set(existingErpIds.map((id) => normalizeText(id)).filter(Boolean));
+  const existingPaymentMap = new Map();
+  (Array.isArray(existingErpPayments) ? existingErpPayments : []).forEach((payment) => {
+    const erpRecordId = normalizeText(payment?.erp_record_id);
+    if (!erpRecordId || existingPaymentMap.has(erpRecordId)) return;
+    existingPaymentMap.set(erpRecordId, payment);
+    knownPaymentErpIds.add(erpRecordId);
+  });
   const knownRefundErpIds = new Set(existingRefundErpIds.map((id) => normalizeText(id)).filter(Boolean));
   const expectedProject = normalizeText(expectedProjectName);
   const expectedScopeId = normalizeText(expectedProjectId);
@@ -261,6 +269,7 @@ export function buildErpSyncPlan({
     importable_count: 0,
     payment_importable_count: 0,
     refund_importable_count: 0,
+    withdrawal_importable_count: 0,
     duplicate_count: 0,
     skipped_not_closed: 0,
     skipped_project_mismatch: 0,
@@ -275,6 +284,7 @@ export function buildErpSyncPlan({
   const preview = [];
   const importableItems = [];
   const refundItems = [];
+  const withdrawalItems = [];
 
   rows.forEach((row) => {
     const normalized = normalizeErpRow(row);
@@ -295,6 +305,36 @@ export function buildErpSyncPlan({
 
     const isClosed = ERP_CLOSED_STATES.has(normalized.state_normalized);
     if (!isClosed) {
+      const existingPayment = existingPaymentMap.get(normalized.erp_id);
+      if (existingPayment && String(existingPayment.source || 'ERP_SYNC') === 'ERP_SYNC') {
+        const withdrawalAmount = normalizeMoney(Math.abs(Number(existingPayment.amount || 0)));
+        summary.matched_count += 1;
+        summary.importable_count += 1;
+        summary.withdrawal_importable_count += 1;
+        preview.push({
+          ...previewItem,
+          amount: withdrawalAmount,
+          sync_type: '收款撤回',
+          result: '可同步',
+          reason: 'ERP 水单已撤回或不再是认领完成状态',
+          matched_order_id: existingPayment.order_id
+        });
+        withdrawalItems.push({
+          erp_record_id: normalized.erp_id,
+          payment_id: existingPayment.id,
+          order_id: existingPayment.order_id,
+          project_id: existingPayment.project_id,
+          amount: withdrawalAmount,
+          payment_time: normalized.payment_time || new Date().toISOString().slice(0, 10),
+          reason: [
+            `ERP水单撤回同步：${normalized.project_name || '未注明项目'}`,
+            `ERP记录：${normalized.erp_id}`,
+            normalized.state ? `ERP状态：${normalized.state}` : ''
+          ].filter(Boolean).join(' | '),
+          raw_payload: JSON.stringify(normalized.raw)
+        });
+        return;
+      }
       summary.skipped_not_closed += 1;
       preview.push({ ...previewItem, result: '跳过', reason: '不是已认领完成状态' });
       return;
@@ -427,6 +467,7 @@ export function buildErpSyncPlan({
     summary,
     preview,
     importableItems,
-    refundItems
+    refundItems,
+    withdrawalItems
   };
 }

@@ -174,6 +174,7 @@ async function getExistingErpPaymentsMap(env, erpRecordIds = []) {
                 p.project_id,
                 p.amount,
                 p.erp_record_id,
+                p.source,
                 o.status AS order_status
             FROM Payments p
             LEFT JOIN Orders o ON o.id = p.order_id
@@ -443,7 +444,7 @@ export async function handleConfigRoutes({
             success: true,
             summary: plan.summary,
             preview: plan.preview.slice(0, 50),
-            can_sync: (plan.importableItems.length + (plan.refundItems?.length || 0)) > 0
+            can_sync: (plan.importableItems.length + (plan.refundItems?.length || 0) + (plan.withdrawalItems?.length || 0)) > 0
         }), { headers: corsHeaders });
     }
 
@@ -463,11 +464,16 @@ export async function handleConfigRoutes({
         const plan = await buildErpPreviewResult(env, projectId, config);
         const paymentItems = plan.importableItems || [];
         const refundItems = plan.refundItems || [];
-        if (paymentItems.length > 0 || refundItems.length > 0) {
-            const existingPaymentsMap = paymentItems.length > 0
+        const withdrawalItems = plan.withdrawalItems || [];
+        if (paymentItems.length > 0 || refundItems.length > 0 || withdrawalItems.length > 0) {
+            const paymentRecordIds = [
+                ...paymentItems.map((item) => item.erp_record_id),
+                ...withdrawalItems.map((item) => item.erp_record_id)
+            ];
+            const existingPaymentsMap = paymentRecordIds.length > 0
                 ? await getExistingErpPaymentsMap(
                     env,
-                    paymentItems.map((item) => item.erp_record_id)
+                    paymentRecordIds
                 )
                 : new Map();
             const existingRefundsMap = refundItems.length > 0
@@ -594,6 +600,54 @@ export async function handleConfigRoutes({
                 affectedOrderPairs.add(`${Number(item.project_id)}::${Number(item.order_id)}`);
             }
 
+            const withdrawalSyncedAt = getChinaTimestamp();
+            for (const item of withdrawalItems) {
+                const erpRecordId = String(item.erp_record_id || '').trim();
+                const existingPayment = existingPaymentsMap.get(erpRecordId);
+                if (!erpRecordId || !existingPayment || String(existingPayment.source || '') !== 'ERP_SYNC') {
+                    continue;
+                }
+                const paymentAmount = Math.abs(Number(existingPayment.amount || item.amount || 0));
+                if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+                    continue;
+                }
+                const withdrawnErpRecordId = `WITHDRAWN:${erpRecordId}:${Number(existingPayment.id)}`;
+                const withdrawalRemark = [
+                    String(item.reason || 'ERP水单撤回同步'),
+                    `原ERP记录：${erpRecordId}`
+                ].filter(Boolean).join(' | ');
+
+                statements.push(
+                    env.DB.prepare(`
+                        UPDATE Payments
+                        SET deleted_at = ?,
+                            deleted_by = ?,
+                            erp_record_id = ?,
+                            remarks = CASE
+                                WHEN remarks IS NULL OR remarks = '' THEN ?
+                                ELSE remarks || ' | ' || ?
+                            END,
+                            raw_payload = ?
+                        WHERE id = ?
+                          AND deleted_at IS NULL
+                          AND erp_record_id = ?
+                          AND source = 'ERP_SYNC'
+                    `).bind(
+                        withdrawalSyncedAt,
+                        'ERP同步撤回',
+                        withdrawnErpRecordId,
+                        withdrawalRemark,
+                        withdrawalRemark,
+                        String(item.raw_payload || ''),
+                        Number(existingPayment.id),
+                        erpRecordId
+                    ),
+                    env.DB.prepare('UPDATE Orders SET paid_amount = MAX(0, ROUND(paid_amount - ?, 2)) WHERE id = ?')
+                        .bind(paymentAmount, Number(existingPayment.order_id))
+                );
+                affectedOrderPairs.add(`${Number(existingPayment.project_id)}::${Number(existingPayment.order_id)}`);
+            }
+
             await executeStatementsInChunks(env, statements);
 
             if (affectedOrderPairs.size > 0) {
@@ -612,11 +666,13 @@ export async function handleConfigRoutes({
 
         const syncedPaymentCount = paymentItems.length;
         const syncedRefundCount = refundItems.length;
-        const syncedCount = syncedPaymentCount + syncedRefundCount;
+        const syncedWithdrawalCount = withdrawalItems.length;
+        const syncedCount = syncedPaymentCount + syncedRefundCount + syncedWithdrawalCount;
         const syncSummary = JSON.stringify({
             synced_count: syncedCount,
             synced_payment_count: syncedPaymentCount,
             synced_refund_count: syncedRefundCount,
+            synced_withdrawal_count: syncedWithdrawalCount,
             summary: plan.summary
         });
 
@@ -631,6 +687,7 @@ export async function handleConfigRoutes({
             synced_count: syncedCount,
             synced_payment_count: syncedPaymentCount,
             synced_refund_count: syncedRefundCount,
+            synced_withdrawal_count: syncedWithdrawalCount,
             summary: plan.summary,
             preview: plan.preview.slice(0, 50)
         }), { headers: corsHeaders });

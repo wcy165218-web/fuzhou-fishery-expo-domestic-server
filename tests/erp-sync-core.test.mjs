@@ -180,7 +180,8 @@ function runTests() {
       { id: 'erp-9', state: 'closed', waterMoney: '100140.00', company: '福建省祥斌生物科技有限公司', exhibitionId: 'EXPO123', refundMoney: '63600.00', costTotal: '63600.00', costDeal: '63600.00', costActual: '36540.00', unTicketMoney: '36540.00', residue: '27060.00', __erpSyncKind: 'refund' },
       { id: 'erp-10', state: 'closed', confirmMoney: '6800', accountCompany: '中渔（福建）渔业有限公司', exhibitionId: 'EXPO123' },
       { id: 'erp-11', state: 'closed', confirmMoney: '1200', extensionName: '福州渔博会旧名称', accountCompany: '旧项目名企业', exhibitionId: 'EXPO123' },
-      { id: 'erp-12', state: 'closed', waterMoney: '36540.00', company: '无退款认领企业', exhibitionId: 'EXPO123', refundMoney: '0.00', __erpSyncKind: 'refund' }
+      { id: 'erp-12', state: 'closed', waterMoney: '36540.00', company: '无退款认领企业', exhibitionId: 'EXPO123', refundMoney: '0.00', __erpSyncKind: 'refund' },
+      { id: 'erp-13', state: '已撤回', confirmMoney: '5000', extensionName: '福州渔博会 2026', accountCompany: '福建海洋科技' }
     ],
     orders: [
       { id: 11, project_id: 1, company_name: '福建海洋科技', total_amount: 6000, paid_amount: 0 },
@@ -195,15 +196,19 @@ function runTests() {
       { id: 20, project_id: 1, company_name: '无退款认领企业', total_amount: 50000, paid_amount: 0 }
     ],
     existingErpIds: ['erp-5'],
+    existingErpPayments: [
+      { id: 301, project_id: 1, order_id: 11, amount: 5000, source: 'ERP_SYNC', erp_record_id: 'erp-13' }
+    ],
     expectedProjectName: '福州渔博会 2026',
     expectedProjectId: 'EXPO123'
   });
 
-  assert.equal(plan.summary.total_rows, 12);
-  assert.equal(plan.summary.importable_count, 5);
+  assert.equal(plan.summary.total_rows, 13);
+  assert.equal(plan.summary.importable_count, 6);
   assert.equal(plan.summary.payment_importable_count, 4);
   assert.equal(plan.summary.refund_importable_count, 1);
-  assert.equal(plan.summary.matched_count, 5);
+  assert.equal(plan.summary.withdrawal_importable_count, 1);
+  assert.equal(plan.summary.matched_count, 6);
   assert.equal(plan.summary.skipped_not_closed, 1);
   assert.equal(plan.summary.skipped_project_mismatch, 2);
   assert.equal(plan.summary.unmatched_company, 1);
@@ -214,6 +219,7 @@ function runTests() {
   assert.equal(plan.summary.skipped_refund_related, 1);
   assert.equal(plan.importableItems.length, 4);
   assert.equal(plan.refundItems.length, 1);
+  assert.equal(plan.withdrawalItems.length, 1);
   assert.equal(plan.importableItems[0].order_id, 11);
   assert.equal(plan.importableItems[0].erp_record_id, 'erp-1');
   assert.equal(plan.importableItems[0].payer_name, '张三');
@@ -233,6 +239,9 @@ function runTests() {
   assert.equal(plan.refundItems[0].erp_record_id, 'erp-9');
   assert.equal(plan.refundItems[0].source, 'ERP_SYNC_REFUND');
   assert.match(plan.refundItems[0].reason, /ERP退款金额：63600\.00/);
+  assert.equal(plan.withdrawalItems[0].erp_record_id, 'erp-13');
+  assert.equal(plan.withdrawalItems[0].payment_id, 301);
+  assert.equal(plan.withdrawalItems[0].amount, 5000);
 }
 
 runTests();
