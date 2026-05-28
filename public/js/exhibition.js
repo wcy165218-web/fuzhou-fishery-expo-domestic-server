@@ -133,15 +133,30 @@ window.resetRefrigeratorRentalSearchState = function(message = '输入企业名�
 
 window.setRefrigeratorRentalMode = function(mode) {
     const normalizedMode = window.normalizeRefrigeratorRentalMode(mode);
-    if (Number(window.currentRefrigeratorRentalEditingId || 0) > 0) return;
+    if (window.currentRefrigeratorRentalVenueConfirmed) {
+        window.showToast('该租赁记录已被主场确认，需先驳回后才能修改租赁主体模式', 'error');
+        return;
+    }
+    const currentMode = window.getCurrentRefrigeratorRentalMode();
+    if (normalizedMode === currentMode) return;
+    const current = window.getCurrentRefrigeratorRentalCompanyData();
+    const isEditing = Number(window.currentRefrigeratorRentalEditingId || 0) > 0;
     window.currentRefrigeratorRentalMode = normalizedMode;
-    window.currentRefrigeratorRentalCompany = normalizedMode === 'no_booth'
-        ? window.createRefrigeratorRentalCompany({
+    if (normalizedMode === 'no_booth') {
+        window.currentRefrigeratorRentalCompany = window.createRefrigeratorRentalCompany({
             rental_mode: 'no_booth',
-            sales_name: String(window.currentUser?.name || '').trim()
-        })
-        : null;
-    window.resetRefrigeratorRentalSearchState(normalizedMode === 'no_booth' ? '无展位租赁无需搜索企业，直接在下方手动填写企业名称和使用地点' : '输入企业名称后从结果中选择');
+            company_name: String(current?.company_name || '').trim(),
+            usage_location: '',
+            sales_name: String(current?.sales_name || window.currentUser?.name || '').trim()
+        });
+    } else {
+        window.currentRefrigeratorRentalCompany = null;
+    }
+    window.resetRefrigeratorRentalSearchState(
+        normalizedMode === 'no_booth'
+            ? (isEditing ? '已切换为无展位租赁，请在下方手动确认企业名称并填写冰柜使用地点' : '无展位租赁无需搜索企业，直接在下方手动填写企业名称和使用地点')
+            : (isEditing ? '已切换为正常参展租赁，请重新搜索并选择订单企业' : '输入企业名称后从结果中选择')
+    );
     window.renderRefrigeratorRentalEditor();
 };
 
@@ -1338,8 +1353,8 @@ window.renderRefrigeratorRentalEditor = function() {
         : (isEditing ? '输入企业名称后，从订单结果中重新选择租赁主体' : '输入企业名称后，从结果中选择');
     companyTip.classList.toggle('hidden', !(isEditing && !isNoBoothMode));
     companyTip.innerText = '当前为订单租赁记录编辑态，可重新搜索并选择当前项目订单企业作为租赁主体。';
-    normalModeButton.disabled = isEditing;
-    noBoothModeButton.disabled = isEditing;
+    normalModeButton.disabled = !!window.currentRefrigeratorRentalVenueConfirmed;
+    noBoothModeButton.disabled = !!window.currentRefrigeratorRentalVenueConfirmed;
     normalModeButton.className = window.getCurrentRefrigeratorRentalMode() === 'booth'
         ? 'btn-primary px-4 py-2.5 text-sm shadow-sm'
         : 'btn-secondary px-4 py-2.5 text-sm';
@@ -1351,7 +1366,7 @@ window.renderRefrigeratorRentalEditor = function() {
     manualShell.classList.toggle('hidden', !isNoBoothMode);
     summaryTitle.innerText = isNoBoothMode ? '当前保存主体信息' : (isEditing ? '当前订单租赁主体信息' : '已选企业信息');
     summaryHint.innerText = isNoBoothMode
-        ? '这里展示的是你手动填写后将随整单一起保存的主体信息。'
+        ? (isEditing ? '编辑时可从正常参展切换到无展位租赁；保存前请确认企业名称和冰柜使用地点。' : '这里展示的是你手动填写后将随整单一起保存的主体信息。')
         : (isEditing ? '这里展示的是当前订单主体信息；如需调整，可在上方搜索框重新选择订单企业。' : '这里展示的是已选企业信息；真正的搜索输入框在上方蓝色区域。');
     if (saveButton) {
         saveButton.disabled = !!window.currentRefrigeratorRentalVenueConfirmed;

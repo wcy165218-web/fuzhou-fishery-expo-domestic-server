@@ -854,6 +854,119 @@ async function testEditingRentalCanSwitchOrderSubject() {
   assert.equal(rentalUpdate.params[4], '2B08');
 }
 
+async function testEditingRentalCanSwitchToNoBoothMode() {
+  const env = createMockEnv({
+    allResponses: {
+      'FROM ExhibitionRefrigeratorConfigs': {
+        results: [
+          { id: 11, project_id: 7, style_name: '立式双门冰柜', spec: '1200L', image_key: null, unit_price: 1800, stock_quantity: 12, is_active: 1, display_order: 1 }
+        ]
+      },
+      'FROM ExhibitionRefrigeratorRentalItems i': {
+        results: []
+      }
+    },
+    firstResponses: {
+      'WHERE id = ?': { id: 901, project_id: 7, company_name: '福建海洋科技', sales_name: '张三', rental_mode: 'booth', hall_names: '1号馆', booth_numbers: '1A01' },
+      'WHERE project_id = ?\n        AND company_name = ?': null
+    },
+    runResponses: {
+      'UPDATE ExhibitionRefrigeratorRentals': { meta: { changes: 1 } },
+      'DELETE FROM ExhibitionRefrigeratorRentalItems': { meta: { changes: 1 } },
+      'INSERT INTO ExhibitionRefrigeratorRentalItems': { meta: { changes: 1 } }
+    }
+  });
+  const request = jsonRequest('http://localhost/api/exhibition/refrigerator-rentals', {
+    project_id: 7,
+    rental_id: 901,
+    company_name: '现场服务点',
+    rental_mode: 'no_booth',
+    usage_location: '北广场临展区',
+    items: [
+      { config_id: 11, quantity: 1, payment_method: 'organizer' }
+    ]
+  });
+  const response = await handleExhibitionRoutes({
+    request,
+    env,
+    url: new URL(request.url),
+    currentUser: { role: 'user', name: '张三' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  const rentalUpdate = env.captured.runCalls.find((call) => call.sql.includes('UPDATE ExhibitionRefrigeratorRentals'));
+  assert.ok(rentalUpdate);
+  assert.equal(rentalUpdate.params[0], '现场服务点');
+  assert.equal(rentalUpdate.params[1], '张三');
+  assert.equal(rentalUpdate.params[2], 'no_booth');
+  assert.equal(rentalUpdate.params[3], '');
+  assert.equal(rentalUpdate.params[4], '北广场临展区');
+  assert.equal(rentalUpdate.params[5], '北广场临展区');
+}
+
+async function testEditingRentalCanSwitchNoBoothToOrderSubject() {
+  const env = createMockEnv({
+    allResponses: {
+      'FROM Orders': {
+        results: [
+          { company_name: '福州远洋渔业', sales_name: '李四', booth_id: '2B08', created_at: '2026-04-23 10:00:00' }
+        ]
+      },
+      'FROM ExhibitionRefrigeratorConfigs': {
+        results: [
+          { id: 11, project_id: 7, style_name: '立式双门冰柜', spec: '1200L', image_key: null, unit_price: 1800, stock_quantity: 12, is_active: 1, display_order: 1 }
+        ]
+      },
+      'FROM ExhibitionRefrigeratorRentalItems i': {
+        results: []
+      },
+      'FROM Booths': {
+        results: [
+          { id: '2B08', hall: '2号馆' }
+        ]
+      }
+    },
+    firstResponses: {
+      'WHERE id = ?': { id: 902, project_id: 7, company_name: '现场服务点', sales_name: '张三', rental_mode: 'no_booth', hall_names: '', booth_numbers: '北广场临展区', usage_location: '北广场临展区' },
+      'WHERE project_id = ?\n        AND company_name = ?': null
+    },
+    runResponses: {
+      'UPDATE ExhibitionRefrigeratorRentals': { meta: { changes: 1 } },
+      'DELETE FROM ExhibitionRefrigeratorRentalItems': { meta: { changes: 1 } },
+      'INSERT INTO ExhibitionRefrigeratorRentalItems': { meta: { changes: 1 } }
+    }
+  });
+  const request = jsonRequest('http://localhost/api/exhibition/refrigerator-rentals', {
+    project_id: 7,
+    rental_id: 902,
+    company_name: '福州远洋渔业',
+    rental_mode: 'booth',
+    items: [
+      { config_id: 11, quantity: 1, payment_method: 'venue' }
+    ]
+  });
+  const response = await handleExhibitionRoutes({
+    request,
+    env,
+    url: new URL(request.url),
+    currentUser: { role: 'admin', name: 'manager01' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  const rentalUpdate = env.captured.runCalls.find((call) => call.sql.includes('UPDATE ExhibitionRefrigeratorRentals'));
+  assert.ok(rentalUpdate);
+  assert.equal(rentalUpdate.params[0], '福州远洋渔业');
+  assert.equal(rentalUpdate.params[1], '李四');
+  assert.equal(rentalUpdate.params[2], 'booth');
+  assert.equal(rentalUpdate.params[3], '2号馆');
+  assert.equal(rentalUpdate.params[4], '2B08');
+  assert.equal(rentalUpdate.params[5], '');
+}
+
 async function testDeleteRentalSucceedsForOwner() {
   const env = createMockEnv({
     firstResponses: {
@@ -1441,6 +1554,8 @@ async function run() {
   await testExhibitionManagerCanConfirmAndRejectRentals();
   await testAdminCanSaveOtherSalesRental();
   await testEditingRentalCanSwitchOrderSubject();
+  await testEditingRentalCanSwitchToNoBoothMode();
+  await testEditingRentalCanSwitchNoBoothToOrderSubject();
   await testDeleteRentalSucceedsForOwner();
   await testLintelListBuildsEligibleRowsWithDefaults();
   await testLintelListExpandsLegacyTruncatedDefaultChineseName();
