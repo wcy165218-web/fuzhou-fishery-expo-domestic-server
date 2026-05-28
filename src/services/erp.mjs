@@ -214,7 +214,14 @@ export async function buildErpPreviewResult(env, projectId, config) {
         WHERE project_id = ? AND status = '正常'
     `).bind(projectId).all()).results || [];
     const existingRows = (await env.DB.prepare(`
-        SELECT p.erp_record_id
+        SELECT
+            p.id,
+            p.project_id,
+            p.order_id,
+            p.amount,
+            p.source,
+            p.erp_record_id,
+            o.status AS order_status
         FROM Payments p
         INNER JOIN Orders o ON o.id = p.order_id
         WHERE p.project_id = ?
@@ -241,6 +248,7 @@ export async function buildErpPreviewResult(env, projectId, config) {
         existingErpIds: [
             ...existingRows.map((row) => row.erp_record_id)
         ],
+        existingErpPayments: existingRows,
         existingRefundErpIds: [
             ...existingRefundRows.map((row) => row.erp_record_id)
         ],
