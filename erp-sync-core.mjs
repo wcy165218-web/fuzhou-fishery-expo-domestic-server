@@ -286,6 +286,36 @@ export function buildErpSyncPlan({
   const refundItems = [];
   const withdrawalItems = [];
 
+  function pushWithdrawalItem(normalized, previewItem, existingPayment, reasonText) {
+    const withdrawalAmount = normalizeMoney(Math.abs(Number(existingPayment.amount || 0)));
+    summary.matched_count += 1;
+    summary.importable_count += 1;
+    summary.withdrawal_importable_count += 1;
+    preview.push({
+      ...previewItem,
+      amount: withdrawalAmount,
+      sync_type: '收款撤回',
+      result: '可同步',
+      reason: reasonText,
+      matched_order_id: existingPayment.order_id
+    });
+    withdrawalItems.push({
+      erp_record_id: normalized.erp_id,
+      payment_id: existingPayment.id,
+      order_id: existingPayment.order_id,
+      project_id: existingPayment.project_id,
+      amount: withdrawalAmount,
+      payment_time: normalized.payment_time || new Date().toISOString().slice(0, 10),
+      reason: [
+        `ERP水单撤回同步：${normalized.project_name || '未注明项目'}`,
+        `ERP记录：${normalized.erp_id}`,
+        normalized.state ? `ERP状态：${normalized.state}` : '',
+        normalized.amount <= 0 ? 'ERP本次返回收款金额为0' : ''
+      ].filter(Boolean).join(' | '),
+      raw_payload: JSON.stringify(normalized.raw)
+    });
+  }
+
   rows.forEach((row) => {
     const normalized = normalizeErpRow(row);
     const previewItem = {
@@ -307,32 +337,7 @@ export function buildErpSyncPlan({
     if (!isClosed) {
       const existingPayment = existingPaymentMap.get(normalized.erp_id);
       if (existingPayment && String(existingPayment.source || 'ERP_SYNC') === 'ERP_SYNC') {
-        const withdrawalAmount = normalizeMoney(Math.abs(Number(existingPayment.amount || 0)));
-        summary.matched_count += 1;
-        summary.importable_count += 1;
-        summary.withdrawal_importable_count += 1;
-        preview.push({
-          ...previewItem,
-          amount: withdrawalAmount,
-          sync_type: '收款撤回',
-          result: '可同步',
-          reason: 'ERP 水单已撤回或不再是认领完成状态',
-          matched_order_id: existingPayment.order_id
-        });
-        withdrawalItems.push({
-          erp_record_id: normalized.erp_id,
-          payment_id: existingPayment.id,
-          order_id: existingPayment.order_id,
-          project_id: existingPayment.project_id,
-          amount: withdrawalAmount,
-          payment_time: normalized.payment_time || new Date().toISOString().slice(0, 10),
-          reason: [
-            `ERP水单撤回同步：${normalized.project_name || '未注明项目'}`,
-            `ERP记录：${normalized.erp_id}`,
-            normalized.state ? `ERP状态：${normalized.state}` : ''
-          ].filter(Boolean).join(' | '),
-          raw_payload: JSON.stringify(normalized.raw)
-        });
+        pushWithdrawalItem(normalized, previewItem, existingPayment, 'ERP 水单已撤回或不再是认领完成状态');
         return;
       }
       summary.skipped_not_closed += 1;
@@ -366,6 +371,11 @@ export function buildErpSyncPlan({
       : { ...previewItem, sync_type: '收款' };
 
     if (effectiveAmount <= 0) {
+      const existingPayment = existingPaymentMap.get(normalized.erp_id);
+      if (!isRefundRow && existingPayment && String(existingPayment.source || 'ERP_SYNC') === 'ERP_SYNC') {
+        pushWithdrawalItem(normalized, effectivePreviewItem, existingPayment, 'ERP 水单本次返回金额为 0，按收款撤回同步');
+        return;
+      }
       summary.skipped_invalid_amount += 1;
       preview.push({ ...effectivePreviewItem, result: '跳过', reason: '金额无效' });
       return;
