@@ -36,7 +36,8 @@ window.homeHallTabDefinitions = [
 
 window.getCurrentProject = function() {
     const pid = document.getElementById('global-project-select')?.value;
-    return (allProjects || []).find((project) => String(project.id) === String(pid)) || null;
+    const projects = window.allProjects || (typeof allProjects !== 'undefined' ? allProjects : []);
+    return (projects || []).find((project) => String(project.id) === String(pid)) || null;
 }
 
 window.formatHomeDate = function(date) {
@@ -1710,19 +1711,43 @@ window.buildHomeSalesBriefText = function(halls = [], generatedAt = new Date()) 
     return lines.join('\n');
 }
 
-window.openHomeSalesBriefModal = function() {
-    const halls = window.homeDashboardData?.hall_overview || [];
-    if (!window.homeDashboardData?.is_admin) {
+window.openHomeSalesBriefModal = async function() {
+    const btn = document.getElementById('btn-generate-sales-brief');
+    const originalText = btn?.innerHTML || '';
+    const isAdmin = window.homeDashboardData?.is_admin === true || window.isAdminUser?.() === true;
+    if (!isAdmin) {
         window.showToast?.('仅管理员可生成销售简报', 'error');
         return;
     }
+
+    if (!window.homeDashboardData || !Array.isArray(window.homeDashboardData.hall_overview)) {
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-wait');
+            btn.innerHTML = '<span>正在生成...</span>';
+        }
+        try {
+            await window.loadHomeDashboard?.();
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-70', 'cursor-wait');
+                btn.innerHTML = originalText;
+            }
+        }
+    }
+
+    const halls = window.homeDashboardData?.hall_overview || [];
     if (!Array.isArray(halls) || halls.length === 0) {
         window.showToast?.('当前项目暂无馆别经营数据，无法生成销售简报', 'error');
         return;
     }
     const modal = document.getElementById('sales-brief-modal');
     const textarea = document.getElementById('home-sales-brief-textarea');
-    if (!modal || !textarea) return;
+    if (!modal || !textarea) {
+        window.showToast?.('销售简报弹窗未加载，请刷新页面后重试', 'error');
+        return;
+    }
     textarea.value = window.buildHomeSalesBriefText(halls);
     modal.classList.remove('hidden');
     setTimeout(() => {
