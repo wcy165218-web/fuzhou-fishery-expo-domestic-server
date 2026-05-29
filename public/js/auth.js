@@ -5,7 +5,7 @@ const navConfig = [
     { id: 'order-entry', label: '订单信息录入', roles: ['admin', 'user'], icon: 'clipboard' }, 
     { id: 'order-list', label: '订单与财务管理', roles: ['admin', 'user'], icon: 'wallet' }, 
     { id: 'pending-orders', label: '待确认订单列表', roles: ['admin', 'user'], icon: 'wallet', hidden: true },
-    { id: 'booth-map', label: '展位图管理', roles: ['admin', 'exhibition_manager'], icon: 'layout' },
+    { id: 'booth-map', label: '展位图管理', roles: ['admin', 'user', 'exhibition_manager'], icon: 'layout' },
     { id: 'booth', label: '展位库管理', roles: ['admin'], superAdminOnly: true, icon: 'layout' }, 
     { id: 'exhibition', label: '展务管理', roles: ['admin', 'user', 'exhibition_manager'], icon: 'folders' },
     { id: 'config', label: '系统配置', roles: ['admin'], superAdminOnly: true, icon: 'settings' }
@@ -53,7 +53,7 @@ window.activeWorkbenchTabId = window.activeWorkbenchTabId || '';
 window.workbenchTabHistory = Array.isArray(window.workbenchTabHistory) ? window.workbenchTabHistory : [];
 window.pendingWorkbenchProjectId = window.pendingWorkbenchProjectId || '';
 
-const FEATURE_SCRIPT_VERSION = '20260528-refrigerator-rental-mode-1';
+const FEATURE_SCRIPT_VERSION = '20260529-booth-map-preview-all';
 const lazyFeatureScriptManifest = {
     'booth-map': {
         scripts: [`./js/booth-map.js?v=${FEATURE_SCRIPT_VERSION}`],
@@ -966,7 +966,7 @@ window.getOrderedNavItems = function(user = window.currentUser) {
     }
     const anchorId = window.isSuperAdmin?.(user)
         ? 'booth'
-        : (normalizedRole === 'admin' ? 'booth-map' : 'order-list');
+        : (normalizedRole === 'admin' || window.canAccessSection?.('booth-map', user) ? 'booth-map' : 'order-list');
     const anchorIndex = items.findIndex((item) => item.id === anchorId);
     items.splice(anchorIndex >= 0 ? anchorIndex + 1 : items.length, 0, exhibitionItem);
     return items;

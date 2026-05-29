@@ -335,8 +335,15 @@ function testExhibitionNavPlacementByRole() {
   userHarness.window.renderNav();
   const userLabels = extractNavLabels(userHarness.document.getElementById('nav-buttons'));
   const userOrderIndex = userLabels.findIndex((label) => label.includes('订单与财务管理'));
+  const userBoothMapIndex = userLabels.findIndex((label) => label.includes('展位图管理'));
   const userExhibitionIndex = userLabels.findIndex((label) => label.includes('展务管理'));
-  assert.ok(userOrderIndex >= 0 && userExhibitionIndex === userOrderIndex + 1, 'user exhibition nav should sit below order finance');
+  assert.ok(userOrderIndex >= 0 && userBoothMapIndex === userOrderIndex + 1, 'user booth map preview nav should sit below order finance');
+  assert.ok(userExhibitionIndex === userBoothMapIndex + 1, 'user exhibition nav should sit below booth map preview');
+  assert.equal(
+    JSON.stringify(userHarness.window.getAvailableBoothMapNavItems().map((item) => item.key)),
+    JSON.stringify(['preview']),
+    'regular users should only see the final booth map preview tab'
+  );
 
   const adminHarness = createAuthHarness();
   adminHarness.window.currentUser = { role: 'admin', name: 'manager01' };
