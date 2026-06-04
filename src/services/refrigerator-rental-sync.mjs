@@ -29,6 +29,10 @@ function isSameBoothList(leftValue, rightValue) {
     return left.every((boothCode, index) => boothCode === right[index]);
 }
 
+function normalizeRentalMode(value) {
+    return String(value || '').trim() || RENTAL_MODE_BOOTH;
+}
+
 async function getBoothHallMap(env, projectId, boothCodes = []) {
     const normalizedCodes = Array.from(new Set((Array.isArray(boothCodes) ? boothCodes : [])
         .map((boothCode) => normalizeBoothCode(boothCode))
@@ -139,4 +143,74 @@ export async function applyRefrigeratorRentalBoothSnapshotSync(env, syncContext)
         updatedCount += 1;
     }
     return { updated_count: updatedCount };
+}
+
+export async function syncRefrigeratorRentalBoothSnapshotsForRentals(env, projectId, rentals = []) {
+    const normalizedProjectId = Number(projectId || 0);
+    const normalizedRentals = Array.isArray(rentals) ? rentals : [];
+    if (!normalizedProjectId || normalizedRentals.length === 0) {
+        return { rentals: normalizedRentals, updated_count: 0 };
+    }
+
+    const companyNames = Array.from(new Set(normalizedRentals
+        .filter((rental) => normalizeRentalMode(rental?.rental_mode) === RENTAL_MODE_BOOTH)
+        .map((rental) => String(rental?.company_name || '').trim())
+        .filter(Boolean)));
+    if (companyNames.length === 0) return { rentals: normalizedRentals, updated_count: 0 };
+
+    const snapshotMap = new Map();
+    for (const companyName of companyNames) {
+        const snapshot = await buildSystemBoothSnapshot(env, normalizedProjectId, companyName);
+        if (snapshot.booth_numbers) snapshotMap.set(companyName, snapshot);
+    }
+    if (snapshotMap.size === 0) return { rentals: normalizedRentals, updated_count: 0 };
+
+    const nowText = getChinaTimestamp();
+    let updatedCount = 0;
+    const nextRentals = [];
+    for (const rental of normalizedRentals) {
+        const companyName = String(rental?.company_name || '').trim();
+        const snapshot = snapshotMap.get(companyName);
+        if (
+            snapshot
+            && normalizeRentalMode(rental?.rental_mode) === RENTAL_MODE_BOOTH
+            && Number(rental?.id || 0) > 0
+            && (
+                !isSameBoothList(rental.booth_numbers, snapshot.booth_numbers)
+                || String(rental.hall_names || '').trim() !== String(snapshot.hall_names || '').trim()
+                || String(rental.usage_location || '').trim()
+            )
+        ) {
+            await env.DB.prepare(`
+              UPDATE ExhibitionRefrigeratorRentals
+              SET hall_names = ?,
+                  booth_numbers = ?,
+                  usage_location = '',
+                  updated_at = ?
+              WHERE id = ?
+                AND project_id = ?
+                AND COALESCE(rental_mode, ?) = ?
+            `).bind(
+                snapshot.hall_names,
+                snapshot.booth_numbers,
+                nowText,
+                Number(rental.id || 0),
+                normalizedProjectId,
+                RENTAL_MODE_BOOTH,
+                RENTAL_MODE_BOOTH
+            ).run();
+            updatedCount += 1;
+            nextRentals.push({
+                ...rental,
+                hall_names: snapshot.hall_names,
+                booth_numbers: snapshot.booth_numbers,
+                usage_location: '',
+                updated_at: nowText
+            });
+        } else {
+            nextRentals.push(rental);
+        }
+    }
+
+    return { rentals: nextRentals, updated_count: updatedCount };
 }
