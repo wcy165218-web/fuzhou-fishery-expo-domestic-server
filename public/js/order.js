@@ -576,6 +576,15 @@ window.buildSwapBoothCandidate = function(runtimeItem, allocatedArea = null, isJ
     };
 }
 
+window.getRuntimeItemMaxJointArea = function(runtimeItem) {
+    const orderSummaries = Array.isArray(runtimeItem?.order_summaries) ? runtimeItem.order_summaries : [];
+    const positiveAreas = orderSummaries
+        .map((order) => Number(order.area || 0))
+        .filter((area) => Number.isFinite(area) && area > 0);
+    if (positiveAreas.length > 0) return Math.max(...positiveAreas);
+    return Number(runtimeItem?.area || 0);
+}
+
 window.resolveOrderBoothJointSelection = function(runtimeItem, boothCode, actionLabel = '新企业') {
     const totalArea = Number(runtimeItem?.area || 0);
     if (!Number.isFinite(totalArea) || totalArea <= 0) {
@@ -585,11 +594,12 @@ window.resolveOrderBoothJointSelection = function(runtimeItem, boothCode, action
     if (!['reserved', 'deposit', 'full_paid'].includes(String(runtimeItem?.status_code || ''))) {
         return { area: totalArea, is_joint: 0 };
     }
-    const areaInput = prompt(`【联合参展提醒】\n\n展位 [${boothCode}] 当前已有企业入驻。\n\n请输入分配给【${actionLabel}】的展位面积（㎡）：\n(原总面积 ${totalArea}㎡，提交后系统将自动从原企业订单中扣除该面积)`, String(totalArea || 9));
+    const maxJointArea = window.getRuntimeItemMaxJointArea(runtimeItem);
+    const areaInput = prompt(`【联合参展提醒】\n\n展位 [${boothCode}] 当前已有企业入驻。\n\n请输入分配给【${actionLabel}】的展位面积（㎡）：\n(展位总面积 ${totalArea}㎡，当前最多可分配 ${maxJointArea}㎡，提交后系统将自动从对应原企业订单中扣除该面积)`, String(maxJointArea || totalArea || 9));
     if (areaInput === null) return null;
     const allocatedArea = parseFloat(areaInput);
-    if (Number.isNaN(allocatedArea) || allocatedArea < 0 || allocatedArea >= totalArea) {
-        window.showToast('输入的面积无效或大于等于总面积，已取消录入', 'error');
+    if (Number.isNaN(allocatedArea) || allocatedArea < 0 || allocatedArea - maxJointArea > 0.009) {
+        window.showToast('输入的面积无效或超过当前可分配面积，已取消录入', 'error');
         return null;
     }
     return { area: allocatedArea, is_joint: 1 };
@@ -677,11 +687,12 @@ window.toggleOrderBoothMapSelectionByCode = function(boothCode) {
     let allocatedArea = totalArea;
     let isJoint = false;
     if (['reserved', 'deposit', 'full_paid'].includes(String(runtimeItem.status_code || ''))) {
-        const areaInput = prompt(`【联合参展提醒】\n\n展位 [${boothCode}] 当前已有企业入驻。\n\n请输入分配给【新企业】的展位面积（㎡）：\n(原总面积 ${totalArea}㎡，提交后系统将自动从原企业订单中扣除该面积)`, String(totalArea || 9));
+        const maxJointArea = window.getRuntimeItemMaxJointArea(runtimeItem);
+        const areaInput = prompt(`【联合参展提醒】\n\n展位 [${boothCode}] 当前已有企业入驻。\n\n请输入分配给【新企业】的展位面积（㎡）：\n(展位总面积 ${totalArea}㎡，当前最多可分配 ${maxJointArea}㎡，提交后系统将自动从对应原企业订单中扣除该面积)`, String(maxJointArea || totalArea || 9));
         if (areaInput === null) return;
         allocatedArea = parseFloat(areaInput);
-        if (Number.isNaN(allocatedArea) || allocatedArea < 0 || allocatedArea >= totalArea) {
-            return window.showToast('输入的面积无效或大于等于总面积，已取消录入', 'error');
+        if (Number.isNaN(allocatedArea) || allocatedArea < 0 || allocatedArea - maxJointArea > 0.009) {
+            return window.showToast('输入的面积无效或超过当前可分配面积，已取消录入', 'error');
         }
         isJoint = true;
     }

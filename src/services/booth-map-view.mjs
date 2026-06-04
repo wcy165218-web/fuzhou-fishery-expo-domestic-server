@@ -283,6 +283,7 @@ export async function getProjectBoothOrdersMap(env, projectId, boothCodes = []) 
                         o.company_name,
                         o.booth_display_name,
                         o.sales_name,
+                        o.area,
                         COALESCE(ps.paid_amount, o.paid_amount, 0) AS paid_amount,
                         o.total_amount,
                         o.created_at,
@@ -530,6 +531,7 @@ export async function getBoothMapRuntimeView(env, projectId, mapId) {
             const orderSummaries = activeOrders.map((order) => ({
                 company_name: String(order.company_name || '').trim(),
                 sales_name: String(order.sales_name || '').trim(),
+                area: Number(order.area || 0),
                 paid_amount: Number(order.paid_amount || 0),
                 total_amount: Number(order.total_amount || 0),
                 reserved_release_due_at: String(order.reserved_release_due_at || ''),

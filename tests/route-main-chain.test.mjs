@@ -990,6 +990,65 @@ async function testChangeOrderBoothAllowsJointOccupiedTarget() {
     assert.equal(orderUpdateCall.params[1], 3);
 }
 
+async function testChangeOrderBoothRejectsJointAreaBeyondRemaining() {
+    const db = createMockEnv({
+        firstResponses: {
+            'SELECT sales_name FROM Orders': { sales_name: 'admin' },
+            'SELECT': (sql) => {
+                if (sql.includes('FROM Orders') && sql.includes('WHERE id = ? AND project_id = ?')) {
+                    return {
+                        id: 101,
+                        project_id: 7,
+                        booth_id: '1A01',
+                        area: 9,
+                        total_booth_fee: 5000,
+                        other_income: 0,
+                        total_amount: 5000,
+                        paid_amount: 0,
+                        fees_json: '[]',
+                        booth_display_name: '测试海产',
+                        company_name: '福建测试海产有限公司',
+                        sales_name: '张三',
+                        status: '正常'
+                    };
+                }
+                return null;
+            }
+        },
+        allResponses: {
+            'FROM Orders': (sql) => {
+                if (sql.includes("status = '正常'")) {
+                    return { results: [{ id: 200, booth_id: '1G01', area: 10, created_at: '2026-04-01' }] };
+                }
+                return { results: [] };
+            },
+            'FROM Booths': {
+                results: [
+                    { id: '1G01', hall: '1号馆', type: '光地', area: 180, price_unit: '平米', base_price: 680, status: '已预定' }
+                ]
+            }
+        },
+        runResponses: {
+            'DELETE FROM BoothLocks': { meta: { changes: 1 } },
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } }
+        }
+    });
+    const req = jsonRequest('http://localhost/api/change-order-booth', {
+        order_id: 101,
+        project_id: 7,
+        target_booths: [{ booth_id: '1G01', area: 20, is_joint: 1 }],
+        swap_reason: '客户要求',
+        actual_fee: 0,
+        price_reason: '联合参展分摊'
+    });
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: ADMIN, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(res.status, 400);
+    assert.ok(body.error.includes('最多可分配 10㎡'));
+    const areaAdjustmentCall = db.captured.batchCalls.flat().find((call) => call.sql.includes('UPDATE Orders SET area = ROUND(area - ?'));
+    assert.equal(areaAdjustmentCall, undefined);
+}
+
 async function testChangeOrderBoothMissingReason() {
     const db = createMockEnv({
         firstResponses: {
@@ -1814,6 +1873,7 @@ async function runTests() {
     await testChangeOrderBoothSyncsSystemRefrigeratorRentalBoothNumbers();
     await testChangeOrderBoothTargetOccupied();
     await testChangeOrderBoothAllowsJointOccupiedTarget();
+    await testChangeOrderBoothRejectsJointAreaBeyondRemaining();
     await testChangeOrderBoothMissingReason();
     await testChangeOrderBoothPreserveFinanceForSuperAdmin();
     await testChangeOrderBoothInheritsDisplayNameWhenStandardChangesToGround();
@@ -1845,4 +1905,4 @@ async function runTests() {
 }
 
 await runTests();
-console.log('Route main-chain regression tests passed (46 cases)');
+console.log('Route main-chain regression tests passed (47 cases)');
