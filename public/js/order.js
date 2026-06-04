@@ -386,7 +386,7 @@ window.renderOrderBoothMapSvg = async function() {
     if (titleEl) titleEl.innerText = map.name || '未命名画布';
     if (tipEl) {
         tipEl.innerText = state.runtimeItems.length
-            ? (state.mode === 'swap' || state.mode === 'pending-reactivate' ? '点击右侧可售展位，作为本次操作的目标展位。' : '点击右侧展位即可加入或移出本次订单。')
+            ? (state.mode === 'swap' || state.mode === 'pending-reactivate' ? '点击右侧展位作为目标；若已有订单，可按提示录入联合参展面积。' : '点击右侧展位即可加入或移出本次订单。')
             : '当前画布暂未保存展位。';
     }
     const selectedIds = new Set((state.tempSelectedBooths || []).map((item) => String(item.id || '').trim().toUpperCase()));
@@ -558,9 +558,11 @@ window.clearOrderBoothMapTempSelection = function() {
     window.renderOrderBoothMapSvg();
 }
 
-window.buildSwapBoothCandidate = function(runtimeItem) {
+window.buildSwapBoothCandidate = function(runtimeItem, allocatedArea = null, isJoint = false) {
     const sourceBooth = window.getOrderBoothMapSourceBooth(runtimeItem);
-    const area = Number(runtimeItem?.area || sourceBooth.area || 0);
+    const area = allocatedArea === null || allocatedArea === undefined
+        ? Number(runtimeItem?.area || sourceBooth.area || 0)
+        : Number(allocatedArea || 0);
     const boothPricing = window.calculateBoothStandardFee(sourceBooth, area);
     return {
         id: String(sourceBooth.id || ''),
@@ -569,8 +571,28 @@ window.buildSwapBoothCandidate = function(runtimeItem) {
         area,
         price_unit: sourceBooth.type === '光地' ? '平米' : '个',
         unit_price: Number(boothPricing.priceUnit || 0),
-        standard_fee: Number(boothPricing.standardFee || 0)
+        standard_fee: Number(boothPricing.standardFee || 0),
+        is_joint: isJoint ? 1 : 0
     };
+}
+
+window.resolveOrderBoothJointSelection = function(runtimeItem, boothCode, actionLabel = '新企业') {
+    const totalArea = Number(runtimeItem?.area || 0);
+    if (!Number.isFinite(totalArea) || totalArea <= 0) {
+        window.showToast('目标展位面积异常，无法选择', 'error');
+        return null;
+    }
+    if (!['reserved', 'deposit', 'full_paid'].includes(String(runtimeItem?.status_code || ''))) {
+        return { area: totalArea, is_joint: 0 };
+    }
+    const areaInput = prompt(`【联合参展提醒】\n\n展位 [${boothCode}] 当前已有企业入驻。\n\n请输入分配给【${actionLabel}】的展位面积（㎡）：\n(原总面积 ${totalArea}㎡，提交后系统将自动从原企业订单中扣除该面积)`, String(totalArea || 9));
+    if (areaInput === null) return null;
+    const allocatedArea = parseFloat(areaInput);
+    if (Number.isNaN(allocatedArea) || allocatedArea < 0 || allocatedArea >= totalArea) {
+        window.showToast('输入的面积无效或大于等于总面积，已取消录入', 'error');
+        return null;
+    }
+    return { area: allocatedArea, is_joint: 1 };
 }
 
 window.selectSwapBoothByCode = function(boothCode) {
@@ -585,13 +607,6 @@ window.selectSwapBoothByCode = function(boothCode) {
     if (String(runtimeItem.status_code || '') === 'locked') {
         return window.showToast(`展位 [${normalizedBoothCode}] 已锁定，当前不可选择`, 'error');
     }
-    if (['reserved', 'deposit', 'full_paid'].includes(String(runtimeItem.status_code || ''))) {
-        return window.showToast(`展位 [${normalizedBoothCode}] 当前已被其他订单占用，请重新选择`, 'error');
-    }
-    const area = Number(runtimeItem.area || 0);
-    if (!Number.isFinite(area) || area <= 0) {
-        return window.showToast('目标展位面积异常，无法换展位', 'error');
-    }
     const existingIndex = (state.tempSelectedBooths || []).findIndex((item) => window.isSameBoothCode(item.id, normalizedBoothCode));
     if (existingIndex >= 0) {
         state.tempSelectedBooths.splice(existingIndex, 1);
@@ -599,10 +614,14 @@ window.selectSwapBoothByCode = function(boothCode) {
         window.renderOrderBoothMapSvg();
         return window.showToast(`已移除目标展位：${normalizedBoothCode}`, 'info');
     }
-    state.tempSelectedBooths.push(window.buildSwapBoothCandidate(runtimeItem));
+    const jointSelection = window.resolveOrderBoothJointSelection(runtimeItem, normalizedBoothCode, '当前订单');
+    if (!jointSelection) return;
+    state.tempSelectedBooths.push(window.buildSwapBoothCandidate(runtimeItem, jointSelection.area, jointSelection.is_joint));
     state.focusedBoothCode = normalizedBoothCode;
     window.renderOrderBoothMapSvg();
-    window.showToast(`已选中目标展位：${normalizedBoothCode}`);
+    window.showToast(jointSelection.is_joint
+        ? `已选中联合参展目标：${normalizedBoothCode}，本单面积 ${jointSelection.area}㎡`
+        : `已选中目标展位：${normalizedBoothCode}`);
 }
 
 window.selectPendingReactivateBoothByCode = function(boothCode) {
@@ -613,13 +632,6 @@ window.selectPendingReactivateBoothByCode = function(boothCode) {
     if (String(runtimeItem.status_code || '') === 'locked') {
         return window.showToast(`展位 [${normalizedBoothCode}] 已锁定，当前不可选择`, 'error');
     }
-    if (['reserved', 'deposit', 'full_paid'].includes(String(runtimeItem.status_code || ''))) {
-        return window.showToast(`展位 [${normalizedBoothCode}] 当前已被其他订单占用，请重新选择`, 'error');
-    }
-    const area = Number(runtimeItem.area || 0);
-    if (!Number.isFinite(area) || area <= 0) {
-        return window.showToast('目标展位面积异常，无法选展位', 'error');
-    }
     const existingIndex = (state.tempSelectedBooths || []).findIndex((item) => window.isSameBoothCode(item.id, normalizedBoothCode));
     if (existingIndex >= 0) {
         state.tempSelectedBooths.splice(existingIndex, 1);
@@ -627,10 +639,14 @@ window.selectPendingReactivateBoothByCode = function(boothCode) {
         window.renderOrderBoothMapSvg();
         return window.showToast(`已移除目标展位：${normalizedBoothCode}`, 'info');
     }
-    state.tempSelectedBooths.push(window.buildSwapBoothCandidate(runtimeItem));
+    const jointSelection = window.resolveOrderBoothJointSelection(runtimeItem, normalizedBoothCode, '恢复订单');
+    if (!jointSelection) return;
+    state.tempSelectedBooths.push(window.buildSwapBoothCandidate(runtimeItem, jointSelection.area, jointSelection.is_joint));
     state.focusedBoothCode = normalizedBoothCode;
     window.renderOrderBoothMapSvg();
-    window.showToast(`已选中新展位：${normalizedBoothCode}`);
+    window.showToast(jointSelection.is_joint
+        ? `已选中联合参展新展位：${normalizedBoothCode}，本单面积 ${jointSelection.area}㎡`
+        : `已选中新展位：${normalizedBoothCode}`);
 }
 
 window.toggleOrderBoothMapSelectionByCode = function(boothCode) {

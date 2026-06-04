@@ -15,6 +15,10 @@ import { acquireBoothLocks, releaseBoothLocks } from '../services/booth-locks.mj
 import { syncBoothStatusByBoothIds } from '../services/booth-sync.mjs';
 import { invalidateHomeDashboardCache } from '../services/home-dashboard-cache.mjs';
 import { refreshOrderOverpaymentIssue } from '../services/overpayment.mjs';
+import {
+    applyRefrigeratorRentalBoothSnapshotSync,
+    prepareRefrigeratorRentalBoothSnapshotSync
+} from '../services/refrigerator-rental-sync.mjs';
 import { normalizeBoothCode, splitBoothCodeList } from '../utils/booth-map.mjs';
 import {
     ORDER_STATUS_ACTIVE,
@@ -289,15 +293,32 @@ async function executeStatementsInChunks(env, statements = [], chunkSize = BATCH
     }
 }
 
-function normalizeTargetBoothIds(payload, excludedBoothId = '') {
-    const rawIds = Array.isArray(payload?.target_booth_ids) && payload.target_booth_ids.length > 0
-        ? payload.target_booth_ids
-        : [payload?.target_booth_id];
-    return Array.from(new Set(
-        rawIds
-            .flatMap((value) => splitBoothCodeList(value))
-            .filter(Boolean)
-    ));
+function normalizeTargetBoothSelections(payload) {
+    const rawSelections = Array.isArray(payload?.target_booths) && payload.target_booths.length > 0
+        ? payload.target_booths
+        : [];
+    const sourceItems = rawSelections.length > 0
+        ? rawSelections
+        : (Array.isArray(payload?.target_booth_ids) && payload.target_booth_ids.length > 0
+            ? payload.target_booth_ids
+            : [payload?.target_booth_id]);
+    const selectionMap = new Map();
+    sourceItems.forEach((item) => {
+        const rawBoothId = typeof item === 'object' && item !== null
+            ? (item.booth_id || item.id || item.target_booth_id)
+            : item;
+        splitBoothCodeList(rawBoothId).forEach((boothId) => {
+            if (!boothId || selectionMap.has(boothId)) return;
+            const itemObject = typeof item === 'object' && item !== null ? item : {};
+            selectionMap.set(boothId, {
+                id: boothId,
+                booth_id: boothId,
+                area: itemObject.area === undefined ? null : toNonNegativeNumber(itemObject.area),
+                is_joint: Number(itemObject.is_joint || 0) ? 1 : 0
+            });
+        });
+    });
+    return Array.from(selectionMap.values());
 }
 
 function hasSameBoothSelection(leftBoothIds = [], rightBoothIds = []) {
@@ -921,7 +942,9 @@ export async function handleOrderRoutes({
             if (!initialOrder) return errorResponse('订单不存在', 404, corsHeaders);
             const currentBoothIds = splitBoothCodeList(initialOrder.booth_id);
             if (currentBoothIds.length === 0) return errorResponse('当前订单未绑定展位，无法换展位', 400, corsHeaders);
-            const targetBoothIds = normalizeTargetBoothIds(payload);
+            const targetBoothSelections = normalizeTargetBoothSelections(payload);
+            const targetBoothIds = targetBoothSelections.map((selection) => selection.booth_id);
+            const targetSelectionById = new Map(targetBoothSelections.map((selection) => [selection.booth_id, selection]));
             if (targetBoothIds.length === 0) return errorResponse('请至少选择一个新的目标展位', 400, corsHeaders);
             if (hasSameBoothSelection(currentBoothIds, targetBoothIds)) {
                 return errorResponse('目标展位未发生变化，请重新选择', 400, corsHeaders);
@@ -946,6 +969,11 @@ export async function handleOrderRoutes({
             if (!hasSameBoothSelection(latestCurrentBoothIds, currentBoothIds)) {
                 return errorResponse('订单展位状态已变化，请刷新后重试', 409, corsHeaders);
             }
+            const refrigeratorRentalBoothSync = await prepareRefrigeratorRentalBoothSnapshotSync(
+                env,
+                projectId,
+                currentOrder.company_name
+            );
 
             const placeholders = targetBoothIds.map(() => '?').join(',');
             const targetBoothRows = ((await env.DB.prepare(`
@@ -991,18 +1019,37 @@ export async function handleOrderRoutes({
                 WHERE project_id = ?
             `).bind(projectId).all()).results || []);
             const priceMap = Object.fromEntries(priceRows.map((row) => [String(row.booth_type || '').trim(), Number(row.price || 0)]));
+            const areaAdjustmentStatements = [];
             const targetBooths = targetBoothIds.map((boothId) => {
                 const boothRow = targetBoothsById.get(boothId);
                 if (String(boothRow.status || '') === '已锁定') {
                     throw createRouteError(`目标展位 ${boothId} 已被临时锁定，请稍后再试`, 409);
                 }
                 const targetBoothOrders = (activeOrdersMap.get(boothId) || []).filter((order) => Number(order.id || 0) !== orderId);
-                if (targetBoothOrders.length > 0) {
+                const targetSelection = targetSelectionById.get(boothId) || {};
+                const isJointTarget = Number(targetSelection.is_joint || 0) === 1;
+                if (targetBoothOrders.length > 0 && !isJointTarget) {
                     throw createRouteError(`目标展位 ${boothId} 当前已被占用，暂不支持直接换入`, 409);
                 }
-                const targetArea = toNonNegativeNumber(boothRow.area);
-                if (!Number.isFinite(targetArea) || targetArea <= 0) {
+                const boothArea = toNonNegativeNumber(boothRow.area);
+                if (!Number.isFinite(boothArea) || boothArea <= 0) {
                     throw createRouteError(`目标展位 ${boothId} 面积异常，无法换展位`, 400);
+                }
+                const selectedArea = targetSelection.area;
+                const targetArea = isJointTarget && Number.isFinite(selectedArea)
+                    ? selectedArea
+                    : boothArea;
+                if (!Number.isFinite(targetArea) || targetArea < 0) {
+                    throw createRouteError(`目标展位 ${boothId} 联合参展面积异常，无法换展位`, 400);
+                }
+                if (isJointTarget && targetArea >= boothArea) {
+                    throw createRouteError(`目标展位 ${boothId} 联合参展面积必须小于展位总面积`, 400);
+                }
+                if (targetBoothOrders.length > 0 && isJointTarget && targetArea > 0) {
+                    areaAdjustmentStatements.push(
+                        env.DB.prepare("UPDATE Orders SET area = ROUND(area - ?, 2) WHERE id = ? AND status = '正常'")
+                            .bind(targetArea, targetBoothOrders[0].id)
+                    );
                 }
                 const unitPrice = Number(boothRow.base_price || 0) > 0
                     ? Number(boothRow.base_price || 0)
@@ -1017,7 +1064,8 @@ export async function handleOrderRoutes({
                     area: targetArea,
                     price_unit: String(boothRow.price_unit || (String(boothRow.type || '') === '光地' ? '平米' : '个')),
                     unit_price: unitPrice,
-                    standard_fee: standardFee
+                    standard_fee: standardFee,
+                    is_joint: isJointTarget ? 1 : 0
                 };
             });
             const totalStandardFee = Number(targetBooths.reduce((sum, item) => sum + Number(item.standard_fee || 0), 0).toFixed(2));
@@ -1033,6 +1081,9 @@ export async function handleOrderRoutes({
             if (aggregatedOrder.error) return errorResponse(aggregatedOrder.error, 400, corsHeaders);
             const nextTotalAmount = Number((rawActualFee + nextOtherIncome).toFixed(2));
             const totalTargetArea = Number(targetBooths.reduce((sum, item) => sum + Number(item.area || 0), 0).toFixed(2));
+            if (totalTargetArea <= 0 && rawActualFee > 0) {
+                return errorResponse('0面积联合参展的应收展位费必须为0', 400, corsHeaders);
+            }
             const nextBoothCount = toBoothCount(totalTargetArea);
             const boothDeltaCount = Number((nextBoothCount - currentBoothCount).toFixed(2));
             const totalAmountDelta = Number((nextTotalAmount - Number(currentOrder.total_amount || 0)).toFixed(2));
@@ -1045,6 +1096,7 @@ export async function handleOrderRoutes({
                 return errorResponse(displayNameResult.error, 400, corsHeaders);
             }
             const statements = [
+                ...areaAdjustmentStatements,
                 env.DB.prepare(`
                     UPDATE Orders
                     SET booth_id = ?,
@@ -1102,6 +1154,7 @@ export async function handleOrderRoutes({
 
             await executeStatementsInChunks(env, statements, BATCH_CHUNK_SIZE);
             await syncBoothStatusByBoothIds(env, projectId, [...currentBoothIds, ...targetBoothIds]);
+            await applyRefrigeratorRentalBoothSnapshotSync(env, refrigeratorRentalBoothSync);
             await refreshOrderReleaseDue(env, orderId);
             await refreshOrderOverpaymentIssue(env, orderId, projectId);
             invalidateHomeDashboardCache(projectId);
@@ -1138,7 +1191,9 @@ export async function handleOrderRoutes({
             const projectId = Number(payload.project_id || 0);
             const priceReason = String(payload.price_reason || '').trim();
             if (!orderId || !projectId) return errorResponse('缺少重新选位必要信息', 400, corsHeaders);
-            const targetBoothIds = normalizeTargetBoothIds(payload);
+            const targetBoothSelections = normalizeTargetBoothSelections(payload);
+            const targetBoothIds = targetBoothSelections.map((selection) => selection.booth_id);
+            const targetSelectionById = new Map(targetBoothSelections.map((selection) => [selection.booth_id, selection]));
             if (targetBoothIds.length === 0) return errorResponse('请至少选择一个目标展位', 400, corsHeaders);
 
             const hasPermission = await canManageOrder(env, currentUser, orderId);
@@ -1203,17 +1258,37 @@ export async function handleOrderRoutes({
                 WHERE project_id = ?
             `).bind(projectId).all()).results || []);
             const priceMap = Object.fromEntries(priceRows.map((row) => [String(row.booth_type || '').trim(), Number(row.price || 0)]));
+            const areaAdjustmentStatements = [];
             const targetBooths = targetBoothIds.map((boothId) => {
                 const boothRow = targetBoothsById.get(boothId);
                 if (String(boothRow.status || '') === '已锁定') {
                     throw createRouteError(`目标展位 ${boothId} 已被临时锁定，请稍后再试`, 409);
                 }
-                if ((activeOrdersMap.get(boothId) || []).length > 0) {
+                const targetBoothOrders = activeOrdersMap.get(boothId) || [];
+                const targetSelection = targetSelectionById.get(boothId) || {};
+                const isJointTarget = Number(targetSelection.is_joint || 0) === 1;
+                if (targetBoothOrders.length > 0 && !isJointTarget) {
                     throw createRouteError(`目标展位 ${boothId} 当前已被占用，请重新选择`, 409);
                 }
-                const targetArea = toNonNegativeNumber(boothRow.area);
-                if (!Number.isFinite(targetArea) || targetArea <= 0) {
+                const boothArea = toNonNegativeNumber(boothRow.area);
+                if (!Number.isFinite(boothArea) || boothArea <= 0) {
                     throw createRouteError(`目标展位 ${boothId} 面积异常，无法选展位`, 400);
+                }
+                const selectedArea = targetSelection.area;
+                const targetArea = isJointTarget && Number.isFinite(selectedArea)
+                    ? selectedArea
+                    : boothArea;
+                if (!Number.isFinite(targetArea) || targetArea < 0) {
+                    throw createRouteError(`目标展位 ${boothId} 联合参展面积异常，无法选展位`, 400);
+                }
+                if (isJointTarget && targetArea >= boothArea) {
+                    throw createRouteError(`目标展位 ${boothId} 联合参展面积必须小于展位总面积`, 400);
+                }
+                if (targetBoothOrders.length > 0 && isJointTarget && targetArea > 0) {
+                    areaAdjustmentStatements.push(
+                        env.DB.prepare("UPDATE Orders SET area = ROUND(area - ?, 2) WHERE id = ? AND status = '正常'")
+                            .bind(targetArea, targetBoothOrders[0].id)
+                    );
                 }
                 const unitPrice = Number(boothRow.base_price || 0) > 0
                     ? Number(boothRow.base_price || 0)
@@ -1228,7 +1303,8 @@ export async function handleOrderRoutes({
                     area: targetArea,
                     price_unit: String(boothRow.price_unit || (String(boothRow.type || '') === '光地' ? '平米' : '个')),
                     unit_price: unitPrice,
-                    standard_fee: standardFee
+                    standard_fee: standardFee,
+                    is_joint: isJointTarget ? 1 : 0
                 };
             });
             if (targetBooths.some((target) => ['标摊', '豪标'].includes(String(target.type || '').trim()))) {
@@ -1243,10 +1319,16 @@ export async function handleOrderRoutes({
             const releaseSettings = await getOrderReleaseSettings(env, projectId);
             const aggregatedOrder = buildAggregatedMultiBoothOrder(targetBooths, rawActualFee, normalizedFeeItems, Number(paymentSummary.paid_amount || 0));
             if (aggregatedOrder.error) return errorResponse(aggregatedOrder.error, 400, corsHeaders);
+            if (Number(aggregatedOrder.area || 0) <= 0 && rawActualFee > 0) {
+                return errorResponse('0面积联合参展的应收展位费必须为0', 400, corsHeaders);
+            }
             const boothDisplayName = resolveCompositeBoothDisplayName(targetBooths, {
                 ...payload,
                 company_name: pendingOrder.company_name || ''
             });
+            if (areaAdjustmentStatements.length > 0) {
+                await executeStatementsInChunks(env, areaAdjustmentStatements, BATCH_CHUNK_SIZE);
+            }
             const updateStatement = env.DB.prepare(`
                 UPDATE Orders
                 SET status = ?,

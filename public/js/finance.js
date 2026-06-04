@@ -1408,7 +1408,8 @@ window.applyPendingReactivateCandidates = function(candidates) {
         price_unit: String(candidate?.price_unit || (String(candidate?.type || '') === '光地' ? '平米' : '个')),
         unit_price: Number(candidate?.unit_price || 0),
         standard_fee: Number(candidate?.standard_fee || 0),
-        booth_map_id: Number(candidate?.booth_map_id || 0)
+        booth_map_id: Number(candidate?.booth_map_id || 0),
+        is_joint: Number(candidate?.is_joint || 0) ? 1 : 0
     })).filter((candidate) => candidate.id);
     if (!normalizedCandidates.length) return;
     window.pendingReactivateCandidateBooths = normalizedCandidates;
@@ -1481,6 +1482,8 @@ window.submitPendingReactivate = async function() {
     const groundDisplayName = document.getElementById('pending-reactivate-ground-display-name').value.trim();
     if (!Number.isFinite(actualFee) || actualFee < 0) return window.showToast('请输入正确的新展位成交展位费', 'error');
     const standardTotal = candidates.reduce((sum, candidate) => sum + Number(candidate.standard_fee || 0), 0);
+    const totalArea = candidates.reduce((sum, candidate) => sum + Number(candidate.area || 0), 0);
+    if (totalArea <= 0 && actualFee > 0) return window.showToast('0面积联合参展的应收展位费只能为 0', 'error');
     if (actualFee < standardTotal && !priceReason) return window.showToast('成交价低于系统原价时，请填写价格说明', 'error');
     if (candidates.some((candidate) => ['标摊', '豪标'].includes(String(candidate.type || ''))) && !standardDisplayName) return window.showToast('标准展位/豪标必须填写展位图简称', 'error');
     if (window.countDisplayNameUnits(standardDisplayName) > 8) return window.showToast('标准展位简称最多 4 个汉字或 8 个英文字符', 'error');
@@ -1509,6 +1512,11 @@ window.submitPendingReactivate = async function() {
                         project_id: projectId,
                         order_id: order.id,
                         target_booth_ids: candidates.map((candidate) => candidate.id),
+                        target_booths: candidates.map((candidate) => ({
+                            booth_id: candidate.id,
+                            area: Number(candidate.area || 0),
+                            is_joint: Number(candidate.is_joint || 0) ? 1 : 0
+                        })),
                         actual_fee: actualFee,
                         price_reason: priceReason,
                         fees_json: feeRows,
@@ -2725,7 +2733,8 @@ window.applySwapBoothCandidates = function(candidates) {
         price_unit: String(candidate?.price_unit || (String(candidate?.type || '') === '光地' ? '平米' : '个')),
         unit_price: Number(candidate?.unit_price || 0),
         standard_fee: Number(candidate?.standard_fee || 0),
-        booth_map_id: Number(candidate?.booth_map_id || 0)
+        booth_map_id: Number(candidate?.booth_map_id || 0),
+        is_joint: Number(candidate?.is_joint || 0) ? 1 : 0
     })).filter((candidate) => candidate.id);
     if (!normalizedCandidates.length) {
         window.fmSwapCandidateBooths = [];
@@ -2804,6 +2813,8 @@ window.submitBoothSwap = async function() {
     if (!preserveFinance) {
         if (!Number.isFinite(actualFee) || actualFee < 0) return window.showToast('请输入正确的新展位成交展位费', 'error');
         const standardTotal = candidates.reduce((sum, candidate) => sum + Number(candidate.standard_fee || 0), 0);
+        const totalArea = candidates.reduce((sum, candidate) => sum + Number(candidate.area || 0), 0);
+        if (totalArea <= 0 && actualFee > 0) return window.showToast('0面积联合参展的应收展位费只能为 0', 'error');
         if (actualFee < standardTotal && !priceReason) return window.showToast('新展位成交价低于系统原价时，请填写价格说明', 'error');
     }
     if (!swapReason && !window.isSuperAdmin?.()) return window.showToast('请填写换展位原因', 'error');
@@ -2826,6 +2837,11 @@ window.submitBoothSwap = async function() {
             project_id: projectId,
             order_id: currentOrder.id,
             target_booth_ids: candidates.map((candidate) => candidate.id),
+            target_booths: candidates.map((candidate) => ({
+                booth_id: candidate.id,
+                area: Number(candidate.area || 0),
+                is_joint: Number(candidate.is_joint || 0) ? 1 : 0
+            })),
             swap_reason: swapReason
         };
         Object.assign(body, displayNamePayload);

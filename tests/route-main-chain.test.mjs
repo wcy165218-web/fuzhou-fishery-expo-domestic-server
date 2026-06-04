@@ -797,6 +797,91 @@ async function testChangeOrderBoothSuccess() {
     assert.equal(body.success, true);
 }
 
+async function testChangeOrderBoothSyncsSystemRefrigeratorRentalBoothNumbers() {
+    let systemSnapshotReadCount = 0;
+    const db = createMockEnv({
+        firstResponses: {
+            'SELECT sales_name FROM Orders': { sales_name: 'admin' },
+            'SELECT': (sql) => {
+                if (sql.includes('FROM Orders') && sql.includes('WHERE id = ? AND project_id = ?')) {
+                    return {
+                        id: 101,
+                        project_id: 7,
+                        booth_id: '1A01',
+                        area: 9,
+                        total_booth_fee: 5000,
+                        other_income: 0,
+                        total_amount: 5000,
+                        paid_amount: 1000,
+                        fees_json: '[]',
+                        booth_display_name: '测试海产',
+                        company_name: '福建测试海产有限公司',
+                        sales_name: '张三',
+                        status: '正常'
+                    };
+                }
+                if (sql.includes('SELECT price')) return { price: 5000 };
+                if (sql.includes('booth_id, total_amount, paid_amount')) return { booth_id: '1A02', total_amount: 5000, paid_amount: 1000 };
+                return null;
+            }
+        },
+        allResponses: {
+            'SELECT booth_id\n      FROM Orders': () => {
+                systemSnapshotReadCount += 1;
+                return {
+                    results: [{
+                        booth_id: systemSnapshotReadCount === 1 ? '1A01' : '1A02',
+                        created_at: '2026-04-01'
+                    }]
+                };
+            },
+            'FROM ExhibitionRefrigeratorRentals': {
+                results: [{
+                    id: 501,
+                    project_id: 7,
+                    company_name: '福建测试海产有限公司',
+                    hall_names: '1号馆',
+                    booth_numbers: '1A01',
+                    rental_mode: 'booth'
+                }]
+            },
+            'FROM Orders': (sql) => {
+                if (sql.includes("status = '正常'")) return { results: [] };
+                return { results: [{ booth_id: '1A02', paid_amount: 1000, total_amount: 5000 }] };
+            },
+            'FROM Booths': {
+                results: [
+                    { id: '1A01', hall: '1号馆', type: '标摊', area: 9, price_unit: '个', base_price: 5000, status: '可售' },
+                    { id: '1A02', hall: '1号馆', type: '标摊', area: 9, price_unit: '个', base_price: 5000, status: '可售' }
+                ]
+            }
+        },
+        runResponses: {
+            'DELETE FROM BoothLocks': { meta: { changes: 1 } },
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } },
+            'UPDATE Orders': { meta: { changes: 1 } },
+            'UPDATE Booths': { meta: { changes: 1 } },
+            'UPDATE ExhibitionRefrigeratorRentals': { meta: { changes: 1 } }
+        }
+    });
+    const req = jsonRequest('http://localhost/api/change-order-booth', {
+        order_id: 101,
+        project_id: 7,
+        target_booth_id: '1A02',
+        swap_reason: '客户要求',
+        actual_fee: 5000
+    });
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: ADMIN, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(body.success, true);
+    const rentalSyncCall = db.captured.runCalls.find((call) => call.sql.includes('UPDATE ExhibitionRefrigeratorRentals'));
+    assert.ok(rentalSyncCall, 'should sync system-derived refrigerator rental booth snapshot');
+    assert.equal(rentalSyncCall.params[0], '1号馆');
+    assert.equal(rentalSyncCall.params[1], '1A02');
+    assert.equal(rentalSyncCall.params[3], 501);
+    assert.equal(rentalSyncCall.params[4], 7);
+}
+
 async function testChangeOrderBoothTargetOccupied() {
     const db = createMockEnv({
         firstResponses: {
@@ -837,6 +922,72 @@ async function testChangeOrderBoothTargetOccupied() {
     assert.equal(res.status, 409);
     const body = await res.json();
     assert.ok(body.error.includes('已被占用'));
+}
+
+async function testChangeOrderBoothAllowsJointOccupiedTarget() {
+    const db = createMockEnv({
+        firstResponses: {
+            'SELECT sales_name FROM Orders': { sales_name: 'admin' },
+            'SELECT': (sql) => {
+                if (sql.includes('FROM Orders') && sql.includes('WHERE id = ? AND project_id = ?')) {
+                    return {
+                        id: 101,
+                        project_id: 7,
+                        booth_id: '1A01',
+                        area: 9,
+                        total_booth_fee: 5000,
+                        other_income: 0,
+                        total_amount: 5000,
+                        paid_amount: 0,
+                        fees_json: '[]',
+                        booth_display_name: '测试海产',
+                        company_name: '福建测试海产有限公司',
+                        sales_name: '张三',
+                        status: '正常'
+                    };
+                }
+                return null;
+            }
+        },
+        allResponses: {
+            'FROM Orders': (sql) => {
+                if (sql.includes("status = '正常'")) {
+                    return { results: [{ id: 200, booth_id: '1A02', area: 9, created_at: '2026-04-01' }] };
+                }
+                return { results: [] };
+            },
+            'FROM Booths': {
+                results: [
+                    { id: '1A02', hall: '1号馆', type: '标摊', area: 9, price_unit: '个', base_price: 5000, status: '可售' }
+                ]
+            }
+        },
+        runResponses: {
+            'DELETE FROM BoothLocks': { meta: { changes: 1 } },
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } },
+            'UPDATE Orders': { meta: { changes: 1 } },
+            'UPDATE Booths': { meta: { changes: 1 } }
+        }
+    });
+    const req = jsonRequest('http://localhost/api/change-order-booth', {
+        order_id: 101,
+        project_id: 7,
+        target_booths: [{ booth_id: '1A02', area: 3, is_joint: 1 }],
+        swap_reason: '客户要求',
+        actual_fee: 1666.67,
+        price_reason: '联合参展分摊'
+    });
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: ADMIN, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(body.success, true);
+    const batchCalls = db.captured.batchCalls.flat();
+    const areaAdjustmentCall = batchCalls.find((call) => call.sql.includes('UPDATE Orders SET area = ROUND(area - ?'));
+    const orderUpdateCall = batchCalls.find((call) => call.sql.includes('UPDATE Orders') && call.sql.includes('SET booth_id = ?'));
+    assert.ok(areaAdjustmentCall, 'should reduce the existing occupant area for joint swap');
+    assert.deepEqual(areaAdjustmentCall.params, [3, 200]);
+    assert.ok(orderUpdateCall, 'should update the swapping order');
+    assert.equal(orderUpdateCall.params[0], '1A02');
+    assert.equal(orderUpdateCall.params[1], 3);
 }
 
 async function testChangeOrderBoothMissingReason() {
@@ -1379,6 +1530,68 @@ async function testDeletePendingOrderRequiresSuperAdmin() {
     assert.equal(res.status, 403);
 }
 
+async function testReactivatePendingOrderAllowsJointOccupiedTarget() {
+    const db = createMockEnv({
+        firstResponses: {
+            'SELECT': (sql) => {
+                if (sql.includes('COUNT(*) AS payment_count')) {
+                    return { payment_count: 0, paid_amount: 0 };
+                }
+                if (sql.includes('SELECT *') && sql.includes('FROM Orders')) {
+                    return {
+                        id: 101,
+                        project_id: 7,
+                        company_name: '福建测试海产有限公司',
+                        status: '待确认',
+                        fees_json: '[]',
+                        paid_amount: 0
+                    };
+                }
+                return null;
+            }
+        },
+        allResponses: {
+            'FROM Orders': (sql) => {
+                if (sql.includes("status = '正常'")) {
+                    return { results: [{ id: 200, booth_id: '1A02', area: 9, created_at: '2026-04-01' }] };
+                }
+                return { results: [] };
+            },
+            'FROM Booths': {
+                results: [
+                    { id: '1A02', hall: '1号馆', type: '标摊', area: 9, price_unit: '个', base_price: 5000, status: '可售' }
+                ]
+            }
+        },
+        runResponses: {
+            'DELETE FROM BoothLocks': { meta: { changes: 1 } },
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } },
+            'UPDATE Orders': { meta: { changes: 1 } },
+            'UPDATE Booths': { meta: { changes: 1 } }
+        }
+    });
+    const req = jsonRequest('http://localhost/api/reactivate-pending-order', {
+        order_id: 101,
+        project_id: 7,
+        target_booths: [{ booth_id: '1A02', area: 3, is_joint: 1 }],
+        actual_fee: 1666.67,
+        price_reason: '联合参展分摊',
+        standard_booth_display_name: '测试海产',
+        fees_json: []
+    });
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: ADMIN, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(body.success, true);
+    const areaAdjustmentCall = db.captured.batchCalls.flat().find((call) => call.sql.includes('UPDATE Orders SET area = ROUND(area - ?'));
+    const reactivateCall = db.captured.runCalls.find((call) => call.sql.includes('SET status = ?') && call.sql.includes('booth_id = ?'));
+    assert.ok(areaAdjustmentCall, 'should reduce the existing occupant area for joint reactivation');
+    assert.deepEqual(areaAdjustmentCall.params, [3, 200]);
+    assert.ok(reactivateCall, 'should reactivate the pending order');
+    assert.equal(reactivateCall.params[0], '正常');
+    assert.equal(reactivateCall.params[1], '1A02');
+    assert.equal(reactivateCall.params[2], 3);
+}
+
 async function testPendingPaymentHandlingCustomRequiresNote() {
     const db = createMockEnv();
     const req = jsonRequest('http://localhost/api/handle-pending-order-payments', {
@@ -1598,7 +1811,9 @@ async function runTests() {
 
     // change-order-booth
     await testChangeOrderBoothSuccess();
+    await testChangeOrderBoothSyncsSystemRefrigeratorRentalBoothNumbers();
     await testChangeOrderBoothTargetOccupied();
+    await testChangeOrderBoothAllowsJointOccupiedTarget();
     await testChangeOrderBoothMissingReason();
     await testChangeOrderBoothPreserveFinanceForSuperAdmin();
     await testChangeOrderBoothInheritsDisplayNameWhenStandardChangesToGround();
@@ -1617,6 +1832,7 @@ async function runTests() {
     await testDeletePendingOrderWithPaymentsAllowedForSuperAdmin();
     await testDeletePendingOrderWithoutPaymentsFullyDeletes();
     await testDeletePendingOrderRequiresSuperAdmin();
+    await testReactivatePendingOrderAllowsJointOccupiedTarget();
     await testPendingPaymentHandlingCustomRequiresNote();
     await testPendingPaymentHandlingSuccess();
 
@@ -1629,4 +1845,4 @@ async function runTests() {
 }
 
 await runTests();
-console.log('Route main-chain regression tests passed (43 cases)');
+console.log('Route main-chain regression tests passed (46 cases)');
