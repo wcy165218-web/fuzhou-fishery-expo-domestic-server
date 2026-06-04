@@ -21,6 +21,7 @@ import {
 import { decryptSensitiveValue, encryptSensitiveValue } from '../utils/crypto.mjs';
 import { invalidateRuntimeViewCache } from '../services/booth-map-view.mjs';
 import { checkPublicSubmitRateLimit } from '../services/write-rate-limit.mjs';
+import { syncRefrigeratorRentalBoothSnapshotsForRentals } from '../services/refrigerator-rental-sync.mjs';
 
 const SQL_IN_CHUNK_SIZE = 80;
 const COMPANY_SEARCH_LIMIT = 30;
@@ -1301,12 +1302,13 @@ async function buildRentalListPayload(env, projectId, currentUser, search = '') 
         whereClauses.push("company_name LIKE ? ESCAPE '\\' COLLATE NOCASE");
         params.push(`%${escapeSqlLikePattern(search)}%`);
     }
-    const rentals = ((await env.DB.prepare(`
+    const rentalRows = ((await env.DB.prepare(`
       SELECT *
       FROM ExhibitionRefrigeratorRentals
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY datetime(updated_at) DESC, id DESC
     `).bind(...params).all()).results || []);
+    const { rentals } = await syncRefrigeratorRentalBoothSnapshotsForRentals(env, projectId, rentalRows);
     const rentalIds = rentals.map((row) => Number(row.id || 0)).filter((id) => id > 0);
     const itemRows = await listRentalItemsByRentalIds(env, rentalIds);
     const configs = await listRefrigeratorConfigs(env, projectId);
@@ -1374,8 +1376,10 @@ async function buildRentalListPayload(env, projectId, currentUser, search = '') 
 }
 
 async function buildRentalDetailPayload(env, rentalId, currentUser) {
-    const rental = await getRentalHeaderById(env, rentalId);
-    if (!rental) return { error: '租赁记录不存在', status: 404 };
+    const rentalRow = await getRentalHeaderById(env, rentalId);
+    if (!rentalRow) return { error: '租赁记录不存在', status: 404 };
+    const { rentals } = await syncRefrigeratorRentalBoothSnapshotsForRentals(env, Number(rentalRow.project_id || 0), [rentalRow]);
+    const rental = rentals[0] || rentalRow;
     if (!canManageExhibitionModule(currentUser) && String(rental.sales_name || '').trim() !== String(currentUser?.name || '').trim()) {
         return { error: '无权限查看该租赁记录', status: 403 };
     }

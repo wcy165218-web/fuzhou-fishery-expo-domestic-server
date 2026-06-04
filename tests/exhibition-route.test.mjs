@@ -413,6 +413,59 @@ async function testExhibitionManagerCanListAllRentals() {
   assert.equal(listCall.params.length, 1, 'exhibition manager list query should not be scoped by sales name');
 }
 
+async function testRentalListSyncsSystemBoothSnapshot() {
+  const env = createMockEnv({
+    allResponses: {
+      'FROM ExhibitionRefrigeratorRentals': {
+        results: [{
+          id: 101,
+          project_id: 7,
+          company_name: '长乐聚泉食品有限公司',
+          sales_name: '王传谊',
+          rental_mode: 'booth',
+          hall_names: '3号馆',
+          booth_numbers: '3C51',
+          organizer_payment_total: 1800,
+          venue_payment_total: 0,
+          total_amount: 1800,
+          venue_confirmed: 0,
+          created_at: '2026-05-25 09:52:25',
+          updated_at: '2026-05-25 09:52:25'
+        }]
+      },
+      'SELECT booth_id\n      FROM Orders': {
+        results: [{ booth_id: '2B51' }]
+      },
+      'FROM Booths': {
+        results: [{ id: '2B51', hall: '2号馆' }]
+      },
+      'FROM ExhibitionRefrigeratorRentalItems i': { results: [] },
+      'FROM ExhibitionRefrigeratorConfigs': { results: [] }
+    },
+    runResponses: {
+      'UPDATE ExhibitionRefrigeratorRentals': { meta: { changes: 1 } }
+    }
+  });
+  const request = new Request('http://localhost/api/exhibition/refrigerator-rentals?projectId=7', { method: 'GET' });
+  const response = await handleExhibitionRoutes({
+    request,
+    env,
+    url: new URL(request.url),
+    currentUser: { role: 'exhibition_manager', name: 'expo01' },
+    corsHeaders: { 'Content-Type': 'application/json' }
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.items[0].hall_names, '2号馆');
+  assert.equal(payload.items[0].booth_numbers, '2B51');
+  const syncCall = env.captured.runCalls.find((call) => call.sql.includes('UPDATE ExhibitionRefrigeratorRentals'));
+  assert.ok(syncCall);
+  assert.equal(syncCall.params[0], '2号馆');
+  assert.equal(syncCall.params[1], '2B51');
+  assert.equal(syncCall.params[3], 101);
+  assert.equal(syncCall.params[4], 7);
+}
+
 async function testExportCsvRequiresSuperAdminAndBuildsRows() {
   const env = createMockEnv({
     allResponses: {
@@ -1545,6 +1598,7 @@ async function run() {
   await testSaveNoBoothRental();
   await testRentalDetailIncludesNoBoothFields();
   await testExhibitionManagerCanListAllRentals();
+  await testRentalListSyncsSystemBoothSnapshot();
   await testExportCsvRequiresSuperAdminAndBuildsRows();
   await testRentalListScopesSalesButAllowsAdminAll();
   await testDeleteConfigBlockedWhenReferenced();
