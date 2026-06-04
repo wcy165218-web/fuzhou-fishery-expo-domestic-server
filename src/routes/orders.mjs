@@ -361,6 +361,36 @@ function buildAggregatedMultiBoothOrder(targetBooths, totalBoothFee, feeItems, m
     };
 }
 
+function resolveJointAreaDonorOrder(activeOrders = [], requestedArea = 0) {
+    const normalizedRequestedArea = Number(requestedArea || 0);
+    const candidates = (Array.isArray(activeOrders) ? activeOrders : [])
+        .map((order) => ({
+            ...order,
+            area: toNonNegativeNumber(order?.area)
+        }))
+        .filter((order) => Number(order.id || 0) > 0 && Number.isFinite(order.area) && order.area >= 0)
+        .sort((left, right) => {
+            const areaDiff = Number(right.area || 0) - Number(left.area || 0);
+            if (areaDiff !== 0) return areaDiff;
+            return Number(left.id || 0) - Number(right.id || 0);
+        });
+    if (normalizedRequestedArea <= 0) {
+        return {
+            donorOrder: candidates[0] || null,
+            maxAvailableArea: candidates[0]?.area || 0
+        };
+    }
+    const donorOrder = candidates.find((order) => Number(order.area || 0) + 0.009 >= normalizedRequestedArea) || null;
+    return {
+        donorOrder,
+        maxAvailableArea: candidates[0]?.area || 0
+    };
+}
+
+function buildInsufficientJointAreaMessage(boothId, maxAvailableArea = 0) {
+    return `展位 ${boothId} 当前可分配剩余面积不足，最多可分配 ${Number(maxAvailableArea || 0).toLocaleString()}㎡`;
+}
+
 export async function handleOrderRoutes({
     request,
     env,
@@ -762,9 +792,13 @@ export async function handleOrderRoutes({
                     return errorResponse(`展位 ${boothItem.booth_id} 已被占用，请刷新后重试`, 409, corsHeaders);
                 }
                 if (existingOrder && boothItem.is_joint && boothItem.area > 0) {
+                    const { donorOrder, maxAvailableArea } = resolveJointAreaDonorOrder(activeOrders, boothItem.area);
+                    if (!donorOrder) {
+                        return errorResponse(buildInsufficientJointAreaMessage(boothItem.booth_id, maxAvailableArea), 400, corsHeaders);
+                    }
                     statements.push(
                         env.DB.prepare("UPDATE Orders SET area = ROUND(area - ?, 2) WHERE id = ? AND status = '正常'")
-                            .bind(boothItem.area, existingOrder.id)
+                            .bind(boothItem.area, donorOrder.id)
                     );
                     boothIdsToSync.add(normalizeBoothCode(boothItem.booth_id));
                 }
@@ -1046,9 +1080,13 @@ export async function handleOrderRoutes({
                     throw createRouteError(`目标展位 ${boothId} 联合参展面积必须小于展位总面积`, 400);
                 }
                 if (targetBoothOrders.length > 0 && isJointTarget && targetArea > 0) {
+                    const { donorOrder, maxAvailableArea } = resolveJointAreaDonorOrder(targetBoothOrders, targetArea);
+                    if (!donorOrder) {
+                        throw createRouteError(buildInsufficientJointAreaMessage(boothId, maxAvailableArea), 400);
+                    }
                     areaAdjustmentStatements.push(
                         env.DB.prepare("UPDATE Orders SET area = ROUND(area - ?, 2) WHERE id = ? AND status = '正常'")
-                            .bind(targetArea, targetBoothOrders[0].id)
+                            .bind(targetArea, donorOrder.id)
                     );
                 }
                 const unitPrice = Number(boothRow.base_price || 0) > 0
@@ -1285,9 +1323,13 @@ export async function handleOrderRoutes({
                     throw createRouteError(`目标展位 ${boothId} 联合参展面积必须小于展位总面积`, 400);
                 }
                 if (targetBoothOrders.length > 0 && isJointTarget && targetArea > 0) {
+                    const { donorOrder, maxAvailableArea } = resolveJointAreaDonorOrder(targetBoothOrders, targetArea);
+                    if (!donorOrder) {
+                        throw createRouteError(buildInsufficientJointAreaMessage(boothId, maxAvailableArea), 400);
+                    }
                     areaAdjustmentStatements.push(
                         env.DB.prepare("UPDATE Orders SET area = ROUND(area - ?, 2) WHERE id = ? AND status = '正常'")
-                            .bind(targetArea, targetBoothOrders[0].id)
+                            .bind(targetArea, donorOrder.id)
                     );
                 }
                 const unitPrice = Number(boothRow.base_price || 0) > 0
