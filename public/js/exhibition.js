@@ -2504,12 +2504,13 @@ window.exportLintelList = function() {
         return;
     }
     const headerCells = ['序号', '业务确认状态', '展务确认状态', '展位号', '中文楣板名', '英文楣板名', '备注', '业务员'];
+    const excelTextCellStyle = "mso-number-format:'\\@';vnd.ms-excel.numberformat:@;";
     const bodyRows = rows.map((row) => `
         <tr>
             <td>${window.escapeHtml(String(row.sequence || ''))}</td>
             <td>${window.escapeHtml(row.business_confirm_status || '未确认')}</td>
             <td>${window.escapeHtml(row.exhibition_confirm_status || '未确认')}</td>
-            <td>${window.escapeHtml(row.booth_code || '')}</td>
+            <td style="${excelTextCellStyle}">${window.escapeHtml(row.booth_code || '')}</td>
             <td>${window.escapeHtml(row.name_zh || '')}</td>
             <td>${window.escapeHtml(row.name_en || '')}</td>
             <td>${window.escapeHtml(row.remark || '')}</td>

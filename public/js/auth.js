@@ -53,7 +53,7 @@ window.activeWorkbenchTabId = window.activeWorkbenchTabId || '';
 window.workbenchTabHistory = Array.isArray(window.workbenchTabHistory) ? window.workbenchTabHistory : [];
 window.pendingWorkbenchProjectId = window.pendingWorkbenchProjectId || '';
 
-const FEATURE_SCRIPT_VERSION = '20260604-joint-area-guard-1';
+const FEATURE_SCRIPT_VERSION = '20260604-lintel-export-text-1';
 const lazyFeatureScriptManifest = {
     'booth-map': {
         scripts: [`./js/booth-map.js?v=${FEATURE_SCRIPT_VERSION}`],

@@ -1,5 +1,5 @@
 // ================= js/app.js =================
-const LOGIN_MODULE_SRC = './js/auth.js?v=20260604-joint-area-guard-1';
+const LOGIN_MODULE_SRC = './js/auth.js?v=20260604-lintel-export-text-1';
 let pendingLoginModuleLoad = null;
 
 function loadLoginModuleOnce() {

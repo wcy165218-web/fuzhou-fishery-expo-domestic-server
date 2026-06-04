@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const exhibitorConfirmHtml = readFileSync(new URL('../public/exhibitor-confirm.html', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
+const exhibitionSource = readFileSync(new URL('../public/js/exhibition.js', import.meta.url), 'utf8');
 
 function findMainContentCloseIndex(source) {
   const mainOpen = source.match(/<div\b[^>]*\bid=["']main-content["'][^>]*>/i);
@@ -65,6 +66,7 @@ assert.ok(html.includes('id="btn-export-exhibitor-directory-list"'), 'exhibitor 
 assert.ok(html.includes('id="lintel-table-wrap"'), 'lintel panel should expose a lintel table container');
 assert.ok(html.includes('id="btn-lintel-batch-confirm"'), 'lintel panel should expose a batch confirm button');
 assert.ok(html.includes('id="btn-export-lintels"'), 'lintel panel should expose a lintel export button');
+assert.ok(exhibitionSource.includes('vnd.ms-excel.numberformat:@'), 'lintel export should keep booth codes as Excel text cells');
 assert.ok(html.includes('onclick="window.downloadOrderCollectionTemplate()"'), 'order import pages should expose the external collection template download');
 assert.ok(html.includes('./js/config.js?v=20260518-order-collection-template-1'), 'config.js version should be bumped for external collection template download support');
 assert.ok(html.includes('id="lintel-filter-business-status"'), 'lintel panel should expose a business confirmation filter');
