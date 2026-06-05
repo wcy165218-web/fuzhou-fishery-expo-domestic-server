@@ -391,6 +391,107 @@ function buildInsufficientJointAreaMessage(boothId, maxAvailableArea = 0) {
     return `展位 ${boothId} 当前可分配剩余面积不足，最多可分配 ${Number(maxAvailableArea || 0).toLocaleString()}㎡`;
 }
 
+function getBoothPriceUnit(boothType, fallback = '') {
+    const normalizedFallback = String(fallback || '').trim();
+    if (normalizedFallback) return normalizedFallback;
+    return String(boothType || '').trim() === '光地' ? '平米' : '个';
+}
+
+function calculateBoothStandardFee(boothType, unitPrice, area) {
+    const normalizedUnitPrice = Number(unitPrice || 0);
+    const normalizedArea = Number(area || 0);
+    if (!Number.isFinite(normalizedUnitPrice) || normalizedUnitPrice < 0) return 0;
+    if (!Number.isFinite(normalizedArea) || normalizedArea < 0) return 0;
+    return String(boothType || '').trim() === '光地'
+        ? Number((normalizedUnitPrice * normalizedArea).toFixed(2))
+        : Number((normalizedUnitPrice * toBoothCount(normalizedArea)).toFixed(2));
+}
+
+async function getAuthoritativeBoothRowsById(env, projectId, boothIds = []) {
+    const normalizedBoothIds = Array.from(new Set(
+        (Array.isArray(boothIds) ? boothIds : [])
+            .map((boothId) => normalizeBoothCode(boothId))
+            .filter(Boolean)
+    ));
+    const rowsById = new Map();
+    if (!projectId || normalizedBoothIds.length === 0) return rowsById;
+
+    for (const boothIdChunk of chunkItems(normalizedBoothIds)) {
+        const placeholders = boothIdChunk.map(() => '?').join(',');
+        const mapRows = ((await env.DB.prepare(`
+            SELECT booth_code, hall, booth_type, area
+            FROM BoothMapItems
+            WHERE project_id = ?
+              AND booth_code IN (${placeholders})
+        `).bind(Number(projectId), ...boothIdChunk).all()).results || []);
+        mapRows.forEach((row) => {
+            const boothId = normalizeBoothCode(row.booth_code);
+            if (!boothId) return;
+            rowsById.set(boothId, {
+                id: boothId,
+                hall: String(row.hall || ''),
+                type: String(row.booth_type || ''),
+                area: Number(row.area || 0),
+                price_unit: getBoothPriceUnit(row.booth_type),
+                base_price: 0
+            });
+        });
+
+        const boothRows = ((await env.DB.prepare(`
+            SELECT id, hall, type, area, price_unit, base_price
+            FROM Booths
+            WHERE project_id = ?
+              AND id IN (${placeholders})
+        `).bind(Number(projectId), ...boothIdChunk).all()).results || []);
+        boothRows.forEach((row) => {
+            const boothId = normalizeBoothCode(row.id);
+            if (!boothId) return;
+            const existing = rowsById.get(boothId) || {};
+            const mapArea = Number(existing.area || 0);
+            const boothArea = Number(row.area || 0);
+            rowsById.set(boothId, {
+                id: boothId,
+                hall: String(existing.hall || row.hall || ''),
+                type: String(existing.type || row.type || ''),
+                area: mapArea > 0 ? mapArea : boothArea,
+                price_unit: getBoothPriceUnit(existing.type || row.type, row.price_unit),
+                base_price: Number(row.base_price || 0)
+            });
+        });
+    }
+
+    return rowsById;
+}
+
+function applyAuthoritativeBoothRowsToSelections(selectedBooths = [], boothRowsById = new Map()) {
+    return (Array.isArray(selectedBooths) ? selectedBooths : []).map((item) => {
+        const boothId = normalizeBoothCode(item?.booth_id || item?.id);
+        const boothRow = boothRowsById.get(boothId);
+        if (!boothRow || Number(item?.is_joint || 0) === 1) return item;
+
+        const authoritativeArea = Number(boothRow.area || 0);
+        const nextArea = authoritativeArea > 0 ? authoritativeArea : Number(item.area || 0);
+        const nextType = String(boothRow.type || item.type || '').trim();
+        const nextUnitPrice = Number(item.unit_price || 0) > 0
+            ? Number(item.unit_price || 0)
+            : Number(boothRow.base_price || 0);
+        const shouldRecalculateStandardFee = Number(item.standard_fee || 0) <= 0
+            || Math.abs(Number(item.area || 0) - nextArea) >= 0.01;
+
+        return {
+            ...item,
+            hall: String(boothRow.hall || item.hall || '').trim(),
+            type: nextType,
+            area: nextArea,
+            price_unit: getBoothPriceUnit(nextType, boothRow.price_unit || item.price_unit),
+            unit_price: nextUnitPrice,
+            standard_fee: shouldRecalculateStandardFee
+                ? calculateBoothStandardFee(nextType, nextUnitPrice, nextArea)
+                : Number(item.standard_fee || 0)
+        };
+    });
+}
+
 export async function handleOrderRoutes({
     request,
     env,
@@ -686,7 +787,7 @@ export async function handleOrderRoutes({
                 return errorResponse(`单次最多选择 ${MAX_SELECTED_BOOTHS} 个展位`, 400, corsHeaders);
             }
 
-            const selectedBooths = noBoothOrder
+            let selectedBooths = noBoothOrder
                 ? [{
                     booth_id: '',
                     area: 0,
@@ -725,6 +826,15 @@ export async function handleOrderRoutes({
 
             if (!noBoothOrder && selectedBooths.length === 0) {
                 return errorResponse('请至少选择一个展位', 400, corsHeaders);
+            }
+
+            if (!noBoothOrder) {
+                const boothRowsById = await getAuthoritativeBoothRowsById(
+                    env,
+                    projectId,
+                    selectedBooths.map((item) => item.booth_id)
+                );
+                selectedBooths = applyAuthoritativeBoothRowsToSelections(selectedBooths, boothRowsById);
             }
 
             const hasStandardTypeBooth = selectedBooths.some((item) => ['标摊', '豪标'].includes(String(item.type || '').trim()));

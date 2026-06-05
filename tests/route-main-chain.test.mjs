@@ -128,6 +128,56 @@ async function testSubmitOrderSuccess() {
     assert.equal(insertCalls[0].params[11], '1A01');
 }
 
+async function testSubmitOrderBackfillsAreaFromBoothMapForNonJointSelection() {
+    const db = createMockEnv({
+        firstResponses: {
+            'COUNT(*) AS total': { total: 0 },
+            'SELECT name FROM Staff WHERE name = ?': { name: '张三' }
+        },
+        allResponses: {
+            'FROM Orders': { results: [] },
+            'FROM BoothMapItems': {
+                results: [
+                    { booth_code: '9A01', hall: '9号馆', booth_type: '标摊', area: 18 }
+                ]
+            },
+            'FROM Booths': {
+                results: [
+                    { id: '9A01', hall: '9号馆', type: '标摊', area: 18, price_unit: '个', base_price: 5000, status: '可售' }
+                ]
+            }
+        },
+        runResponses: {
+            'DELETE FROM BoothLocks': { meta: { changes: 1 } },
+            'INSERT INTO BoothLocks': { meta: { changes: 1 } }
+        }
+    });
+    const req = jsonRequest('http://localhost/api/submit-order', {
+        project_id: 7,
+        company_name: '九馆测试海产',
+        credit_code: '91350100MA12345679',
+        category: '水产预制菜',
+        main_business: '海鲜加工',
+        contact_person: '王先生',
+        phone: '13800000002',
+        region: '福建省 - 福州市 - 鼓楼区',
+        sales_name: '张三',
+        total_booth_fee: 5000,
+        selected_booths: [
+            { booth_id: '9A01', hall: '9号馆', type: '标摊', area: 0, price_unit: '个', unit_price: 5000, standard_fee: 0, is_joint: 0 }
+        ],
+        standard_booth_display_name: '九馆测试',
+        fees_json: '[]'
+    });
+    const res = await handleOrderRoutes({ request: req, env: db, url: new URL(req.url), currentUser: ADMIN, corsHeaders: CORS });
+    const body = await res.json();
+    assert.equal(body.success, true);
+    const insertCall = db.captured.batchCalls.flat().find((call) => call.sql.includes('INSERT INTO Orders'));
+    assert.ok(insertCall, 'should insert order');
+    assert.equal(insertCall.params[11], '9A01');
+    assert.equal(insertCall.params[12], 18);
+}
+
 async function testSubmitOrderSuperAdminCanAssignDifferentSalesOwner() {
     const db = createMockEnv({
         firstResponses: {
@@ -1840,6 +1890,7 @@ async function testResolveOverpaymentMissingNote() {
 async function runTests() {
     // submit-order
     await testSubmitOrderSuccess();
+    await testSubmitOrderBackfillsAreaFromBoothMapForNonJointSelection();
     await testSubmitOrderSuperAdminCanAssignDifferentSalesOwner();
     await testSubmitOrderRejectsLongProfile();
     await testSubmitOrderNonSuperAdminCannotReassignSalesOwner();
@@ -1905,4 +1956,4 @@ async function runTests() {
 }
 
 await runTests();
-console.log('Route main-chain regression tests passed (47 cases)');
+console.log('Route main-chain regression tests passed (48 cases)');
